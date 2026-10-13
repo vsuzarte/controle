@@ -1,0 +1,9 @@
+html { overflow-y: auto; }
+.v-application { font-variant-numeric: tabular-nums; }
+.valor { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
+.riscado { text-decoration: line-through; opacity: .55; }
+.pagina { max-width: 1100px; margin: 0 auto; padding: 16px; padding-bottom: 96px; }
+.rotulo { font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; opacity: .7; }
+.grande { font-size: 1.6rem; font-weight: 700; line-height: 1.2; }
+.lista-dia { font-size: .8rem; font-weight: 600; opacity: .7; padding: 12px 16px 4px; text-transform: capitalize; }
+@media (max-width: 600px) { .pagina { padding: 12px; padding-bottom: 110px; } .grande { font-size: 1.35rem; } }

@@ -1,0 +1,31 @@
+# Claude / assistentes (não versionar)
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+**/.claude/
+
+# Segredos e dados locais
+.env
+dados/
+backups/
+*.db
+*.db-shm
+*.db-wal
+
+# .NET
+bin/
+obj/
+*.user
+TestResults/
+
+# Node / Vite
+node_modules/
+dist/
+frontend/.vite/
+
+# Editores / SO
+.vs/
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
