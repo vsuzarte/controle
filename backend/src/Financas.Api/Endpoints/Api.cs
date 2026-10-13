@@ -21,8 +21,21 @@ public static class Api
             await db.Database.CanConnectAsync() ? Results.Ok(new { status = "ok" }) : Results.StatusCode(503));
 
         var auth = app.MapGroup("/api/auth");
-        auth.MapGet("/status", (HttpContext ctx) =>
-            new { exigeLogin, autenticado = !exigeLogin || ctx.User.Identity?.IsAuthenticated == true });
+        // "hoje" vem do servidor: o navegador usa o mesmo dia do backend (fuso e data fixa dos testes).
+        auth.MapGet("/status", (HttpContext ctx, IRelogio relogio) =>
+            new { exigeLogin, autenticado = !exigeLogin || ctx.User.Identity?.IsAuthenticated == true, hoje = relogio.Hoje });
+
+        // Só no ambiente E2E: recria o banco do zero para cada teste começar limpo.
+        if (app.Configuration.GetValue<bool>("E2E"))
+        {
+            app.MapPost("/api/e2e/reset", async (AppDbContext db) =>
+            {
+                await db.Database.EnsureDeletedAsync();
+                await db.Database.MigrateAsync();
+                await DadosIniciais.Aplicar(db);
+                return Results.Ok();
+            });
+        }
         auth.MapPost("/login", async (LoginDto dto, HttpContext ctx) =>
         {
             if (!exigeLogin) return Results.Ok();

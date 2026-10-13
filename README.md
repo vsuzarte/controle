@@ -50,14 +50,14 @@ Não exponha a porta diretamente na internet.
 
 **Tudo é lançamento**, com status `Previsto → Realizado` (ou `Cancelado`).
 
-- **Recorrências** (salário, aluguel, energia, assinaturas) geram lançamentos *previstos* para os próximos 3 meses.
+- **Contas do mês** (salário, aluguel, luz, assinaturas) geram lançamentos *previstos* para os próximos 3 meses.
 - **Compras parceladas** geram uma parcela prevista por mês. A diferença de centavos vai na 1ª parcela.
 - **Pagar ou receber é confirmar o previsto**: é o mesmo registro, então não existe pagamento duplicado.
   Ao lançar algo novo, o formulário avisa se existe um previsto parecido.
 - **Cartão de crédito é uma conta.** Cada compra entra na categoria certa e na fatura do mês.
   Pagar a fatura é uma *transferência* do banco para o cartão, então o gasto não é contado duas vezes.
   Compras a partir do dia do fechamento entram na fatura seguinte.
-  Recorrências no cartão e em débito automático, com valor fixo, são confirmadas sozinhas na data.
+  Contas do mês no cartão ou em débito automático, com valor fixo, são confirmadas sozinhas na data.
 - **Planejamento do mês** tem três blocos que não se sobrepõem:
   1. Receitas.
   2. Contas fixas e parcelas: protegidas, mudam só na origem.
@@ -71,12 +71,38 @@ Não exponha a porta diretamente na internet.
 **Saldo disponível** = contas (sem cartões), só com o que já foi realizado até hoje.
 **Saldo projetado no fim do mês** = saldo disponível + a receber − contas a pagar − faturas a vencer − orçamento variável restante.
 
+## Testes
+
+Rode sempre antes de subir uma mudança. Tudo roda em Docker, sem instalar nada:
+
+```powershell
+.\testar.ps1          # regras de negócio (.NET) + telas (Playwright)
+.\testar.ps1 -SoE2E   # só as telas
+```
+
+- **Regras de negócio** (`backend/tests`): duplicidade, auditoria, bloqueio de exclusão, cartão, estorno, previsão.
+- **Telas** (`e2e/testes`, Playwright): sobe uma cópia isolada do sistema (`docker-compose.e2e.yml`) com
+  **banco próprio, zerado antes de cada teste**, data fixa em 15/10/2026 e senha `e2e`. Roda no computador
+  e num celular simulado (Pixel 7). O banco de verdade nunca é tocado.
+- Falhou? O relatório com print, vídeo e passo a passo fica em `e2e/relatorio/index.html`.
+
+Para **olhar o ambiente de testes** com dados de exemplo (http://localhost:8090, senha `e2e`):
+
+```powershell
+docker compose -f docker-compose.e2e.yml up -d --build app
+node e2e/dados-exemplo.mjs
+```
+
+Ao criar uma tela ou regra nova, crie o teste junto em `e2e/testes`, usando os atalhos de `apoio.ts`
+(`api.lancar`, `api.contaDoMes`, `digitarValor`, `escolher`, `salvar`…).
+
 ## Desenvolvimento
 
 ```text
 backend/src/Financas.Api    API: Dominio/, Dados/ (EF Core + migrations), Servicos/ (regras), Endpoints/
 backend/tests/Financas.Tests Testes das regras de negócio (SQLite em memória com as migrations reais)
-frontend/src                 Vue: views/ (telas), components/, estado.ts, api.ts
+frontend/src                 Vue 3 + Vuetify + Chart.js: views/ (telas), components/, estado.ts, api.ts
+e2e/                         Testes de tela (Playwright), dados de exemplo e capturas de tela
 ```
 
 Sem .NET/Node instalados (ou com a instalação quebrada), dá para usar só o Docker:

@@ -49,47 +49,65 @@ const opcoesContas = computed(() => estado.contas.map((c) => ({ title: c.nome, v
 const opcoesCategorias = computed(() => estado.categorias.map((c) => ({ title: `${c.nome}${c.ativa ? '' : ' (inativa)'}`, value: c.id })))
 </script>
 
+
 <template>
   <div class="pagina">
-    <div class="d-flex align-center flex-wrap ga-2 mb-3">
-      <SeletorMes v-model="estado.mes" />
+    <div class="cabecalho">
+      <div class="titulo-pagina">Lançamentos</div>
       <v-spacer />
-      <v-text-field v-model="filtros.busca" prepend-inner-icon="mdi-magnify" placeholder="Buscar" density="compact" clearable style="max-width: 240px; min-width: 160px" />
-      <v-btn variant="tonal" prepend-icon="mdi-filter-variant" @click="verFiltros = !verFiltros">
-        Filtros<v-badge v-if="filtrosAtivos" :content="filtrosAtivos" inline color="primary" />
+      <SeletorMes v-model="estado.mes" />
+    </div>
+
+    <v-row dense class="mb-3">
+      <v-col v-for="t in [
+        { rotulo: 'Entradas', valor: totais.entradas, icone: 'mdi-arrow-up', cor: 'success' },
+        { rotulo: 'Gastos', valor: totais.saidas, icone: 'mdi-arrow-down', cor: 'error' },
+        { rotulo: 'A pagar', valor: totais.previsto, icone: 'mdi-clock-outline', cor: 'warning' },
+      ]" :key="t.rotulo" cols="4">
+        <v-card class="pa-3 d-flex flex-column flex-sm-row align-sm-center ga-2 ga-sm-3">
+          <v-avatar :color="t.cor" variant="tonal" rounded="lg" size="36"><v-icon size="18">{{ t.icone }}</v-icon></v-avatar>
+          <div style="min-width: 0">
+            <div class="rotulo">{{ t.rotulo }}</div>
+            <div class="valor text-truncate">{{ brl(t.valor) }}</div>
+          </div>
+        </v-card>
+      </v-col>
+    </v-row>
+
+    <div class="d-flex ga-2 mb-3 align-center">
+      <v-text-field v-model="filtros.busca" prepend-inner-icon="mdi-magnify" placeholder="Buscar lançamento" density="compact" clearable aria-label="Buscar" />
+      <v-btn variant="tonal" :color="filtrosAtivos ? 'primary' : undefined" height="40" prepend-icon="mdi-tune-variant" @click="verFiltros = !verFiltros">
+        Filtros<span v-if="filtrosAtivos" class="ml-1">({{ filtrosAtivos }})</span>
       </v-btn>
     </div>
 
     <v-expand-transition>
       <v-card v-if="verFiltros" class="pa-3 mb-3">
         <v-row dense>
-          <v-col cols="12" sm="6" md="3"><v-select v-model="filtros.tipo" :items="['Receita', 'Despesa', 'Transferencia']" label="Tipo" clearable density="compact" /></v-col>
-          <v-col cols="12" sm="6" md="3"><v-select v-model="filtros.status" :items="['Previsto', 'Realizado', 'Cancelado']" label="Status" clearable density="compact" /></v-col>
+          <v-col cols="12" sm="6" md="3">
+            <v-select v-model="filtros.tipo" :items="[{ title: 'Receita', value: 'Receita' }, { title: 'Despesa', value: 'Despesa' }, { title: 'Transferência', value: 'Transferencia' }]" label="Tipo" clearable density="compact" />
+          </v-col>
+          <v-col cols="12" sm="6" md="3"><v-select v-model="filtros.status" :items="['Previsto', 'Realizado', 'Cancelado']" label="Situação" clearable density="compact" /></v-col>
           <v-col cols="12" sm="6" md="3"><v-autocomplete v-model="filtros.categoriaId" :items="opcoesCategorias" label="Categoria" clearable density="compact" /></v-col>
           <v-col cols="12" sm="6" md="3"><v-select v-model="filtros.contaId" :items="opcoesContas" label="Conta" clearable density="compact" /></v-col>
         </v-row>
       </v-card>
     </v-expand-transition>
 
-    <v-row dense class="mb-2">
-      <v-col cols="4"><v-card class="pa-3"><div class="rotulo">Entradas</div><div class="valor text-success">{{ brl(totais.entradas) }}</div></v-card></v-col>
-      <v-col cols="4"><v-card class="pa-3"><div class="rotulo">Gastos</div><div class="valor text-error">{{ brl(totais.saidas) }}</div></v-card></v-col>
-      <v-col cols="4"><v-card class="pa-3"><div class="rotulo">A pagar</div><div class="valor text-warning">{{ brl(totais.previsto) }}</div></v-card></v-col>
-    </v-row>
-
     <v-card>
       <v-progress-linear v-if="carregando" indeterminate color="primary" />
-      <div v-if="!porDia.length && !carregando" class="pa-8 text-center text-medium-emphasis">
-        <v-icon size="48" class="mb-2">mdi-tray</v-icon>
-        <div>Nenhum lançamento neste mês.</div>
-        <div class="text-caption">Use o botão + (ou a tecla N) para lançar.</div>
-      </div>
-      <template v-for="[dia, itens] in porDia" :key="dia">
-        <div class="lista-dia">{{ dataBr(dia, true) }}</div>
-        <v-list class="py-0">
+      <v-empty-state
+        v-if="!porDia.length && !carregando"
+        icon="mdi-receipt-text-outline"
+        title="Nada por aqui"
+        text="Toque no + para lançar seu primeiro gasto do mês."
+      />
+      <v-list v-else class="pa-2">
+        <template v-for="[dia, itens] in porDia" :key="dia">
+          <v-list-subheader class="text-capitalize font-weight-bold">{{ dataBr(dia, true) }}</v-list-subheader>
           <LancamentoLinha v-for="l in itens" :key="l.id" :l="l" />
-        </v-list>
-      </template>
+        </template>
+      </v-list>
     </v-card>
 
     <div v-if="qtdCancelados" class="text-center mt-3">

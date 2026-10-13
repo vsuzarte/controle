@@ -19,7 +19,8 @@ public record Alerta(
     Guid? CartaoId,
     DateOnly? FaturaMes);
 
-public record GastoCategoria(Guid CategoriaId, string Categoria, string? Cor, decimal Gasto, decimal? Orcado);
+/// <summary>Gasto = tudo da categoria no mês; Variavel = só o do dia a dia (o que o orçamento controla).</summary>
+public record GastoCategoria(Guid CategoriaId, string Categoria, string? Cor, decimal Gasto, decimal Variavel, decimal? Orcado);
 
 public record ResumoView(
     DateOnly Hoje,
@@ -101,7 +102,7 @@ public class ResumoService(AppDbContext db, IRelogio relogio, PlanejamentoServic
             {
                 var c = g.First().Categoria!;
                 var orcado = plano.Variaveis.FirstOrDefault(v => v.CategoriaId == c.Id && !v.Dispensado)?.Orcado;
-                return new GastoCategoria(c.Id, c.Nome, c.Cor, g.Sum(l => l.Valor), orcado);
+                return new GastoCategoria(c.Id, c.Nome, c.Cor, g.Sum(l => l.Valor), g.Where(l => !l.Programado).Sum(l => l.Valor), orcado);
             })
             .OrderByDescending(g => g.Gasto)
             .ToList();

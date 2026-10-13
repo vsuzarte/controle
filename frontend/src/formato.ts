@@ -6,10 +6,21 @@ const diasSemana = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']
 export const brl = (v: number | null | undefined) => moeda.format(v ?? 0)
 export const num = (v: number | null | undefined) => numero.format(v ?? 0)
 
-/** "2026-10-13" no fuso local (sem a armadilha do UTC do `toISOString`). */
+const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+/** "Hoje" informado pelo servidor (mesmo fuso do backend; data fixa no ambiente de testes). */
+let hojeServidor: string | null = null
+export function definirHoje(dataIso: string) {
+  hojeServidor = dataIso
+}
+
 export function hojeIso() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return hojeServidor ?? iso(new Date())
+}
+
+export function somarDias(dataIso: string, dias: number) {
+  const [a, m, d] = dataIso.split('-').map(Number)
+  return iso(new Date(a, m - 1, d + dias))
 }
 
 export const mesIso = (dataIso: string) => dataIso.slice(0, 7)

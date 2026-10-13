@@ -1,0 +1,35 @@
+# Ambiente isolado para os testes ponta a ponta (Playwright).
+# Banco próprio dentro do container (some ao terminar), data fixa e senha de teste.
+# Não interfere no sistema de verdade (outro projeto, sem portas publicadas).
+name: financas-e2e
+
+services:
+  app:
+    build: .
+    image: financas:e2e
+    environment:
+      Senha: e2e
+      E2E: "true"
+      DataFixa: "2026-10-15"
+      Backup__Pasta: ""
+    ports:
+      # Só neste PC: para ver o ambiente de testes no navegador ou rodar o Playwright local (npx playwright test --ui).
+      - "127.0.0.1:8090:8080"
+
+  testes:
+    image: mcr.microsoft.com/playwright:v1.52.0-noble
+    working_dir: /e2e
+    environment:
+      BASE_URL: http://app:8080
+      SENHA_E2E: e2e
+      CI: "1"
+    volumes:
+      - ./e2e:/e2e
+      - e2e-node-modules:/e2e/node_modules
+    command: sh -c "npm ci --no-audit --no-fund --loglevel=error && npx playwright test"
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  e2e-node-modules:

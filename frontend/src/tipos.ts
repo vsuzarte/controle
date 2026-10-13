@@ -154,7 +154,7 @@ export interface Resumo {
   variavelRestante: number
   saldoProjetado: number
   planejamento: Planejamento
-  gastosPorCategoria: { categoriaId: string; categoria: string; cor: string | null; gasto: number; orcado: number | null }[]
+  gastosPorCategoria: { categoriaId: string; categoria: string; cor: string | null; gasto: number; variavel: number; orcado: number | null }[]
 }
 
 export interface AuditLog {

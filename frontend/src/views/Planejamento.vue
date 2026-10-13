@@ -5,6 +5,7 @@ import { alterado, avisar, erro, estado, verHistorico } from '../estado'
 import { brl } from '../formato'
 import type { CategoriaPlanejada, Planejamento } from '../tipos'
 import CampoValor from '../components/CampoValor.vue'
+import GraficoOrcamento from '../components/GraficoOrcamento.vue'
 import LancamentoLinha from '../components/LancamentoLinha.vue'
 import SeletorMes from '../components/SeletorMes.vue'
 
@@ -116,11 +117,12 @@ const categoriasDisponiveis = computed(() =>
         <v-col cols="12" lg="7">
           <v-card class="mb-3">
             <v-card-title class="text-subtitle-1 font-weight-bold d-flex align-center">
-              <v-icon class="mr-2">mdi-chart-donut</v-icon>Gastos variáveis por categoria
+              <v-icon class="mr-2">mdi-chart-bar</v-icon>Gastos do dia a dia por categoria
             </v-card-title>
             <v-card-subtitle class="text-wrap">
               Sugerido a partir do que você gastou antes (sem contar contas fixas e parcelas, que estão ao lado). Edite ou remova à vontade.
             </v-card-subtitle>
+            <div v-if="p.variaveis.some((v) => !v.dispensado)" class="px-4 pt-2"><GraficoOrcamento :itens="p.variaveis" /></div>
             <v-list class="py-1">
               <div v-if="!p.variaveis.length" class="pa-4 text-medium-emphasis text-body-2">
                 Ainda sem orçamento. Depois de um mês de lançamentos, o sistema sugere automaticamente; ou adicione abaixo.
@@ -138,7 +140,7 @@ const categoriasDisponiveis = computed(() =>
                 <div v-if="!v.dispensado" class="mt-1">
                   <v-progress-linear
                     :model-value="v.orcado ? (v.gasto / v.orcado) * 100 : v.gasto > 0 ? 100 : 0"
-                    :color="v.orcado != null && v.gasto > v.orcado ? 'error' : v.cor ?? 'primary'"
+                    :color="v.orcado != null && v.gasto > v.orcado ? 'error' : 'primary'"
                     height="6"
                     rounded
                     bg-opacity="0.15"
@@ -166,7 +168,7 @@ const categoriasDisponiveis = computed(() =>
         <v-col cols="12" lg="5">
           <v-card class="mb-3">
             <v-card-title class="text-subtitle-1 font-weight-bold"><v-icon class="mr-2">mdi-lock-outline</v-icon>Contas fixas e parcelas</v-card-title>
-            <v-card-subtitle class="text-wrap">Compromissos protegidos: mudam só no próprio lançamento ou na recorrência.</v-card-subtitle>
+            <v-card-subtitle class="text-wrap">Já combinados: para mudar, edite o lançamento ou a conta em Contas do mês.</v-card-subtitle>
             <v-list class="py-0">
               <div v-if="!p.compromissos.length" class="pa-4 text-medium-emphasis text-body-2">Nenhum compromisso neste mês.</div>
               <LancamentoLinha v-for="l in p.compromissos" :key="l.id" :l="l" mostrar-data />
@@ -177,7 +179,7 @@ const categoriasDisponiveis = computed(() =>
             <v-card-title class="text-subtitle-1 font-weight-bold"><v-icon class="mr-2">mdi-cash-plus</v-icon>Receitas</v-card-title>
             <v-list class="py-0">
               <div v-if="!p.receitas.length" class="pa-4 text-medium-emphasis text-body-2">
-                Nenhuma receita no mês. Cadastre o salário em Recorrências para ele aparecer aqui todo mês.
+                Nenhuma receita no mês. Cadastre o salário em Contas do mês para ele aparecer aqui todo mês.
               </div>
               <LancamentoLinha v-for="l in p.receitas" :key="l.id" :l="l" mostrar-data />
             </v-list>

@@ -7,10 +7,12 @@ const atual = computed(() => mes.value === mesIso(hojeIso()))
 </script>
 
 <template>
-  <div class="d-flex align-center ga-1">
-    <v-btn icon="mdi-chevron-left" variant="text" density="comfortable" aria-label="Mês anterior" @click="mes = somarMeses(mes, -1)" />
-    <div class="text-subtitle-1 font-weight-medium text-center" style="min-width: 150px">{{ nomeMes(mes) }}</div>
-    <v-btn icon="mdi-chevron-right" variant="text" density="comfortable" aria-label="Próximo mês" @click="mes = somarMeses(mes, 1)" />
-    <v-btn v-if="!atual" variant="tonal" size="small" @click="mes = mesIso(hojeIso())">Hoje</v-btn>
-  </div>
+  <v-sheet class="cartao d-inline-flex align-center pa-1" rounded="lg" border data-testid="seletor-mes">
+    <v-btn icon="mdi-chevron-left" variant="text" size="small" aria-label="Mês anterior" @click="mes = somarMeses(mes, -1)" />
+    <v-btn variant="text" class="font-weight-bold" min-width="160" @click="mes = mesIso(hojeIso())">
+      {{ nomeMes(mes) }}
+      <v-chip v-if="!atual" size="x-small" color="primary" variant="tonal" class="ml-2">hoje</v-chip>
+    </v-btn>
+    <v-btn icon="mdi-chevron-right" variant="text" size="small" aria-label="Próximo mês" @click="mes = somarMeses(mes, 1)" />
+  </v-sheet>
 </template>

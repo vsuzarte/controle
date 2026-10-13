@@ -8,3 +8,4 @@ backups
 .git
 .claude
 backend/tests
+e2e/node_modules

@@ -10,7 +10,10 @@ public class RelogioSistema(IConfiguration config) : IRelogio
 {
     private readonly TimeZoneInfo _fuso = ObterFuso(config["Fuso"] ?? "America/Sao_Paulo");
 
-    public DateOnly Hoje => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, _fuso));
+    /// <summary>Usado só no ambiente de testes E2E para os cenários serem determinísticos.</summary>
+    private readonly DateOnly? _dataFixa = DateOnly.TryParse(config["DataFixa"], out var d) ? d : null;
+
+    public DateOnly Hoje => _dataFixa ?? DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, _fuso));
 
     private static TimeZoneInfo ObterFuso(string id)
     {

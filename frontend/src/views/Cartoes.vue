@@ -90,25 +90,23 @@ async function pagar() {
         </v-slide-group-item>
       </v-slide-group>
 
-      <v-card v-if="fatura" class="mb-3 pa-4">
-        <div class="d-flex flex-wrap align-center ga-4">
-          <div>
-            <div class="rotulo">Fatura de {{ nomeMes(fatura.mes.slice(0, 7)) }}</div>
-            <div class="grande">{{ brl(fatura.total) }}</div>
-            <v-chip :color="cores[fatura.status]" size="small" variant="flat">{{ fatura.status }}</v-chip>
-          </div>
-          <v-divider vertical class="d-none d-sm-flex" />
-          <div class="text-body-2">
-            <div>Fecha em <b>{{ dataBr(fatura.fechamento) }}</b></div>
-            <div>Vence em <b>{{ dataBr(fatura.vencimento) }}</b></div>
-          </div>
-          <div class="text-body-2">
-            <div>Pago: <span class="valor text-success">{{ brl(fatura.pago) }}</span></div>
-            <div>Falta: <span class="valor" :class="fatura.restante > 0 ? 'text-error' : ''">{{ brl(fatura.restante) }}</span></div>
-          </div>
+      <v-card v-if="fatura" class="destaque destaque--indigo mb-4 pa-6" rounded="xl" data-testid="fatura">
+        <div class="d-flex align-center">
+          <v-icon size="28">mdi-integrated-circuit-chip</v-icon>
           <v-spacer />
-          <v-btn v-if="fatura.restante > 0" color="primary" prepend-icon="mdi-cash-check" @click="abrirPagamento">Pagar fatura</v-btn>
+          <v-chip :color="cores[fatura.status]" size="small" variant="flat" label>{{ fatura.status }}</v-chip>
         </div>
+        <div class="rotulo mt-5" style="opacity: 0.85">Fatura de {{ nomeMes(fatura.mes.slice(0, 7)) }}</div>
+        <div class="grande" data-testid="fatura-total">{{ brl(fatura.total) }}</div>
+        <v-row dense class="mt-4 text-body-2">
+          <v-col cols="6" sm="3"><div style="opacity: 0.75">Fecha</div><b>{{ dataBr(fatura.fechamento) }}</b></v-col>
+          <v-col cols="6" sm="3"><div style="opacity: 0.75">Vence</div><b>{{ dataBr(fatura.vencimento) }}</b></v-col>
+          <v-col cols="6" sm="3"><div style="opacity: 0.75">Pago</div><b class="valor">{{ brl(fatura.pago) }}</b></v-col>
+          <v-col cols="6" sm="3"><div style="opacity: 0.75">Falta</div><b class="valor" data-testid="fatura-restante">{{ brl(fatura.restante) }}</b></v-col>
+        </v-row>
+        <v-btn v-if="fatura.restante > 0" color="white" variant="flat" class="mt-4 text-indigo-darken-3" prepend-icon="mdi-cash-check" @click="abrirPagamento">
+          Pagar fatura
+        </v-btn>
       </v-card>
 
       <v-card v-if="fatura">

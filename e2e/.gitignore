@@ -1,0 +1,6 @@
+node_modules/
+relatorio/
+test-results/
+.auth/
+capturas/
+ultima-execucao.log

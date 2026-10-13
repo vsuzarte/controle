@@ -1,30 +1,40 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useDisplay } from 'vuetify'
 import { api, sessao } from './api'
 import { carregarCadastros, erro, estado, novoLancamento } from './estado'
+import { definirHoje, mesIso } from './formato'
 import LancamentoForm from './components/LancamentoForm.vue'
 import ConfirmarDialog from './components/ConfirmarDialog.vue'
 import HistoricoDialog from './components/HistoricoDialog.vue'
 
-const { mobile } = useDisplay()
+const { mdAndUp } = useDisplay()
+const route = useRoute()
 const pronto = ref(false)
 const senha = ref('')
 const entrando = ref(false)
 const erroLogin = ref('')
+const mais = ref(false)
 
 const menu = [
-  { to: '/', titulo: 'Início', icone: 'mdi-view-dashboard-outline' },
-  { to: '/lancamentos', titulo: 'Lançamentos', icone: 'mdi-swap-vertical' },
-  { to: '/planejamento', titulo: 'Planejamento', icone: 'mdi-calendar-month-outline' },
-  { to: '/cartoes', titulo: 'Cartões', icone: 'mdi-credit-card-outline' },
-  { to: '/recorrencias', titulo: 'Recorrências', icone: 'mdi-repeat' },
-  { to: '/cadastros', titulo: 'Cadastros', icone: 'mdi-cog-outline' },
+  { to: '/', titulo: 'Início', icone: 'mdi-home-variant-outline', iconeAtivo: 'mdi-home-variant' },
+  { to: '/lancamentos', titulo: 'Lançamentos', icone: 'mdi-swap-vertical', iconeAtivo: 'mdi-swap-vertical-bold' },
+  { to: '/contas-do-mes', titulo: 'Contas do mês', icone: 'mdi-calendar-blank-outline', iconeAtivo: 'mdi-calendar-blank' },
+  { to: '/planejamento', titulo: 'Planejamento', icone: 'mdi-chart-donut', iconeAtivo: 'mdi-chart-donut' },
+  { to: '/cartoes', titulo: 'Cartões', icone: 'mdi-credit-card-outline', iconeAtivo: 'mdi-credit-card' },
+  { to: '/cadastros', titulo: 'Ajustes', icone: 'mdi-cog-outline', iconeAtivo: 'mdi-cog' },
 ]
-const menuCelular = menu.slice(0, 4)
+const barraEsquerda = menu.slice(0, 2)
+const barraDireita = [menu[2]]
+const menuMais = menu.slice(3)
+const maisAtivo = computed(() => menuMais.some((m) => m.to === route.path))
+const ativo = (to: string) => route.path === to
 
 async function iniciar() {
-  const st = await api.get<{ exigeLogin: boolean; autenticado: boolean }>('/auth/status')
+  const st = await api.get<{ exigeLogin: boolean; autenticado: boolean; hoje: string }>('/auth/status')
+  definirHoje(st.hoje)
+  estado.mes = mesIso(st.hoje)
   sessao.precisaLogin = !st.autenticado
   if (st.autenticado) {
     await carregarCadastros()
@@ -66,81 +76,91 @@ onMounted(() => {
 
 <template>
   <v-app>
-    <template v-if="sessao.precisaLogin">
-      <v-main>
-        <div class="d-flex align-center justify-center" style="min-height: 100vh; padding: 16px">
-          <v-card width="360" class="pa-6">
-            <div class="d-flex align-center ga-3 mb-6">
-              <img src="/icone.svg" width="40" height="40" alt="" />
-              <div class="text-h6">Finanças</div>
-            </div>
-            <v-form @submit.prevent="entrar">
-              <v-text-field v-model="senha" label="Senha" type="password" autofocus :error-messages="erroLogin" />
-              <v-btn type="submit" color="primary" block size="large" class="mt-4" :loading="entrando">Entrar</v-btn>
-            </v-form>
+    <!-- ===== Login ===== -->
+    <v-main v-if="sessao.precisaLogin">
+      <v-container class="fill-height" style="max-width: 420px">
+        <div class="w-100">
+          <v-card class="destaque pa-8 mb-6" rounded="xl">
+            <v-icon size="40">mdi-chart-timeline-variant-shimmer</v-icon>
+            <div class="text-h5 font-weight-bold mt-4">Finanças</div>
+            <div style="opacity: 0.8">Seu dinheiro, sob controle.</div>
           </v-card>
+          <v-form @submit.prevent="entrar">
+            <v-text-field v-model="senha" label="Senha" type="password" autofocus :error-messages="erroLogin" prepend-inner-icon="mdi-lock-outline" />
+            <v-btn type="submit" color="primary" variant="flat" block size="x-large" class="mt-4" :loading="entrando">Entrar</v-btn>
+          </v-form>
         </div>
-      </v-main>
-    </template>
+      </v-container>
+    </v-main>
 
     <template v-else>
-      <v-navigation-drawer v-if="!mobile" permanent width="230">
-        <div class="d-flex align-center ga-3 pa-4">
-          <img src="/icone.svg" width="32" height="32" alt="" />
-          <div class="text-subtitle-1 font-weight-bold">Finanças</div>
-        </div>
-        <v-list nav density="comfortable" color="primary">
-          <v-list-item v-for="m in menu" :key="m.to" :to="m.to" :prepend-icon="m.icone" :title="m.titulo" exact />
+      <!-- ===== Computador: barra lateral ===== -->
+      <v-navigation-drawer v-if="mdAndUp" permanent width="256" color="background" border="0">
+        <v-list-item class="py-6 px-5">
+          <template #prepend>
+            <v-avatar class="destaque" rounded="lg" size="40"><v-icon color="white">mdi-chart-timeline-variant-shimmer</v-icon></v-avatar>
+          </template>
+          <v-list-item-title class="text-h6 font-weight-bold">Finanças</v-list-item-title>
+        </v-list-item>
+        <v-list nav color="primary" class="px-3">
+          <v-list-item
+            v-for="m in menu"
+            :key="m.to"
+            :to="m.to"
+            :prepend-icon="ativo(m.to) ? m.iconeAtivo : m.icone"
+            :title="m.titulo"
+            rounded="lg"
+            exact
+            class="mb-1"
+          />
         </v-list>
         <template #append>
-          <div class="pa-3">
-            <v-btn block color="primary" prepend-icon="mdi-plus" size="large" @click="novoLancamento()">
-              Lançar
-              <v-tooltip activator="parent" location="top">Atalho: tecla N</v-tooltip>
-            </v-btn>
+          <div class="pa-4">
+            <v-btn block color="primary" variant="flat" size="x-large" prepend-icon="mdi-plus" @click="novoLancamento()">Lançar</v-btn>
+            <div class="text-caption text-center text-medium-emphasis mt-2">ou aperte <v-chip size="x-small" label>N</v-chip></div>
           </div>
         </template>
       </v-navigation-drawer>
 
-      <v-app-bar v-if="mobile" density="compact" flat border="b">
-        <template #prepend><img src="/icone.svg" width="28" height="28" alt="" class="ml-3" /></template>
-        <v-app-bar-title class="text-subtitle-1 font-weight-bold">Finanças</v-app-bar-title>
-        <template #append>
-          <v-btn icon="mdi-repeat" to="/recorrencias" aria-label="Recorrências" />
-          <v-btn icon="mdi-cog-outline" to="/cadastros" aria-label="Cadastros" />
-        </template>
-      </v-app-bar>
-
       <v-main>
-        <router-view v-if="pronto" :key="$route.path" />
-        <div v-else class="d-flex justify-center pa-12"><v-progress-circular indeterminate color="primary" /></div>
+        <router-view v-if="pronto" v-slot="{ Component }">
+          <transition name="pagina" mode="out-in">
+            <component :is="Component" :key="route.path" />
+          </transition>
+        </router-view>
+        <div v-else class="d-flex justify-center pa-16"><v-progress-circular indeterminate color="primary" /></div>
       </v-main>
 
-      <v-bottom-navigation v-if="mobile" grow color="primary">
-        <v-btn v-for="m in menuCelular" :key="m.to" :to="m.to" exact>
-          <v-icon>{{ m.icone }}</v-icon>
-          <span>{{ m.titulo }}</span>
+      <!-- ===== Celular: barra inferior ===== -->
+      <v-bottom-navigation v-if="!mdAndUp" grow color="primary" height="68" elevation="8" aria-label="Navegação">
+        <v-btn v-for="m in barraEsquerda" :key="m.to" :to="m.to" exact>
+          <v-icon>{{ ativo(m.to) ? m.iconeAtivo : m.icone }}</v-icon><span>{{ m.titulo }}</span>
+        </v-btn>
+        <v-btn class="botao-mais" aria-label="Novo lançamento" @click="novoLancamento()"><v-icon>mdi-plus</v-icon></v-btn>
+        <v-btn v-for="m in barraDireita" :key="m.to" :to="m.to" exact>
+          <v-icon>{{ ativo(m.to) ? m.iconeAtivo : m.icone }}</v-icon><span>Contas</span>
+        </v-btn>
+        <v-btn :active="maisAtivo" @click="mais = true">
+          <v-icon>mdi-dots-grid</v-icon><span>Mais</span>
         </v-btn>
       </v-bottom-navigation>
 
-      <v-fab
-        v-if="mobile && pronto"
-        icon="mdi-plus"
-        color="primary"
-        size="large"
-        app
-        location="bottom end"
-        style="margin-bottom: 64px"
-        aria-label="Novo lançamento"
-        @click="novoLancamento()"
-      />
+      <v-bottom-sheet v-model="mais">
+        <v-card rounded="t-xl" class="pb-6">
+          <v-list nav class="pa-3">
+            <v-list-item v-for="m in menuMais" :key="m.to" :to="m.to" :title="m.titulo" rounded="lg" @click="mais = false">
+              <template #prepend><v-avatar color="primary" variant="tonal" rounded="lg"><v-icon>{{ m.iconeAtivo }}</v-icon></v-avatar></template>
+            </v-list-item>
+          </v-list>
+        </v-card>
+      </v-bottom-sheet>
 
       <LancamentoForm v-if="pronto" />
       <ConfirmarDialog v-if="pronto" />
       <HistoricoDialog v-if="pronto" />
     </template>
 
-    <v-snackbar v-model="estado.aviso.mostrar" :color="estado.aviso.cor" timeout="3500" location="top">
+    <v-snackbar v-model="estado.aviso.mostrar" :color="estado.aviso.cor" timeout="3500" location="top" rounded="lg">
       {{ estado.aviso.texto }}
     </v-snackbar>
   </v-app>
