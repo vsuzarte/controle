@@ -243,10 +243,11 @@ const corTipo = computed(() => TIPOS.find((t) => t.valor === f.tipo)!.cor)
       </v-card-item>
 
       <div class="px-4 pt-2" :class="'text-' + corTipo">
-        <div v-if="!editando" class="d-flex justify-center">
-          <v-btn-toggle v-model="f.tipo" mandatory rounded="lg" density="comfortable" :color="corTipo" variant="tonal" divided>
-            <v-btn v-for="t in TIPOS" :key="t.valor" :value="t.valor" :prepend-icon="t.icone">{{ t.titulo }}</v-btn>
-          </v-btn-toggle>
+        <div v-if="!editando" class="d-flex justify-center flex-wrap ga-2" role="radiogroup" aria-label="Tipo do lançamento">
+          <v-btn v-for="t in TIPOS" :key="t.valor" :prepend-icon="t.icone" rounded="lg" :color="f.tipo === t.valor ? t.cor : undefined"
+            :variant="f.tipo === t.valor ? 'flat' : 'tonal'" role="radio" :aria-checked="f.tipo === t.valor" @click="f.tipo = t.valor">
+            {{ t.titulo }}
+          </v-btn>
         </div>
         <CampoValor ref="campoValor" v-model="f.valor" grande :label="rotuloValor" />
         <div v-if="parcelado" class="text-center text-caption font-weight-bold" data-testid="rotulo-valor">{{ rotuloValor }}</div>
