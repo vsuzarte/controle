@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useDisplay } from 'vuetify'
 import { api } from '../api'
-import { alterado, confirmarLancamento, editarLancamento, erro, moverParcelas, verHistorico } from '../estado'
+import { alterado, confirmarLancamento, editarLancamento, erro, moverParcelas, verCompra, verHistorico } from '../estado'
 import { brl, dataBr, hojeIso, nomeMes } from '../formato'
 import type { Lancamento } from '../tipos'
 import CampoValor from './CampoValor.vue'
@@ -83,6 +83,7 @@ async function executar() {
 
     <v-list-item-title class="font-weight-semibold d-flex align-center ga-1">
       <span class="text-truncate">{{ l.descricao }}</span>
+      <v-icon v-if="l.compraId" size="14" class="text-medium-emphasis" title="Lançado pela nota fiscal">mdi-receipt-text-outline</v-icon>
       <v-icon v-if="l.regraId" size="14" class="text-medium-emphasis">{{ l.totalParcelas ? 'mdi-credit-card-clock-outline' : 'mdi-repeat' }}</v-icon>
     </v-list-item-title>
     <v-list-item-subtitle>{{ subtitulo }}</v-list-item-subtitle>
@@ -127,6 +128,7 @@ async function executar() {
             />
             <v-list-item v-if="!cancelado" prepend-icon="mdi-cancel" title="Cancelar lançamento" base-color="error" @click="abrir('cancelar')" />
             <v-list-item v-if="!cancelado && l.totalParcelas && l.regraId" prepend-icon="mdi-calendar-arrow-right" title="Mover parcelas" @click="moverParcelas(l.regraId, l.descricao)" />
+            <v-list-item v-if="l.compraId" prepend-icon="mdi-receipt-text-outline" title="Ver itens da nota" @click="verCompra(l.compraId)" />
             <v-list-item prepend-icon="mdi-history" title="Histórico" @click="verHistorico(l.id, l.descricao)" />
           </v-list>
         </v-menu>

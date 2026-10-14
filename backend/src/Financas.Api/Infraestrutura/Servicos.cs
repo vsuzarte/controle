@@ -4,6 +4,7 @@ using Financas.Api.Dominio;
 using Financas.Api.Funcionalidades.Auditoria;
 using Financas.Api.Funcionalidades.Cartoes;
 using Financas.Api.Funcionalidades.Categorias;
+using Financas.Api.Funcionalidades.Compras;
 using Financas.Api.Funcionalidades.Contas;
 using Financas.Api.Funcionalidades.Lancamentos;
 using Financas.Api.Funcionalidades.Planejamento;
@@ -79,5 +80,13 @@ public static class Servicos
         s.AddScoped<ResumoService>();
         s.AddScoped<RelatorioService>();
         s.AddScoped<AuditoriaService>();
+        s.AddScoped<CompraService>();
+        s.AddScoped<ComprasConsultas>();
+        // Leitura da nota no site da Fazenda: tempo limite curto e identificação de navegador comum.
+        s.AddHttpClient<LeitorNfce>(c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(20);
+            c.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; Financas/1.0)");
+        });
     }
 }

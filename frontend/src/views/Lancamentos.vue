@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useDisplay } from 'vuetify'
 import { api, qs } from '../api'
-import { erro, estado } from '../estado'
+import { erro, estado, lerNotaFiscal } from '../estado'
 import { brl, dataBr, hojeIso } from '../formato'
 import { ordenarLancamentos, somarEntradas, type OrdemLancamentos } from '../regras'
 import type { Lancamento } from '../tipos'
@@ -104,6 +104,7 @@ const opcoesCategorias = computed(() => estado.categorias.map((c) => ({ title: `
       <v-spacer />
       <v-text-field v-model="filtros.busca" prepend-inner-icon="mdi-magnify" placeholder="Buscar" density="compact" clearable hide-details
         aria-label="Buscar" style="min-width: 180px; max-width: 280px" />
+      <v-btn variant="tonal" icon="mdi-qrcode-scan" rounded="lg" size="40" color="primary" title="Lançar pela nota fiscal (QR code)" aria-label="Lançar pela nota fiscal" @click="lerNotaFiscal()" />
       <v-menu>
         <template #activator="{ props }">
           <v-btn v-bind="props" variant="tonal" :icon="ORDENS.find((o) => o.value === ordem)!.icone" rounded="lg" size="40"

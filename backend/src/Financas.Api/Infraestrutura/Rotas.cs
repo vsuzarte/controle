@@ -3,6 +3,7 @@ using Financas.Api.Funcionalidades.Auditoria;
 using Financas.Api.Funcionalidades.Autenticacao;
 using Financas.Api.Funcionalidades.Cartoes;
 using Financas.Api.Funcionalidades.Categorias;
+using Financas.Api.Funcionalidades.Compras;
 using Financas.Api.Funcionalidades.Contas;
 using Financas.Api.Funcionalidades.Lancamentos;
 using Financas.Api.Funcionalidades.Planejamento;
@@ -51,5 +52,6 @@ public static class Rotas
         api.MapearPrevisao();
         api.MapearRelatorios();
         api.MapearAuditoria();
+        api.MapearCompras();
     }
 }

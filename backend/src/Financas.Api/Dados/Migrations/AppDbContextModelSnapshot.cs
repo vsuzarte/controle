@@ -93,6 +93,55 @@ namespace Financas.Api.Dados.Migrations
                     b.ToTable("Categorias");
                 });
 
+            modelBuilder.Entity("Financas.Api.Dominio.Compra", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ChaveAcesso")
+                        .IsRequired()
+                        .HasMaxLength(44)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Cnpj")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ContaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CriadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Desconto")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("Emissao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FormaPagamentoNota")
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Loja")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Total")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChaveAcesso")
+                        .IsUnique();
+
+                    b.HasIndex("ContaId");
+
+                    b.ToTable("Compras");
+                });
+
             modelBuilder.Entity("Financas.Api.Dominio.Configuracao", b =>
                 {
                     b.Property<string>("Chave")
@@ -150,6 +199,63 @@ namespace Financas.Api.Dados.Migrations
                     b.ToTable("Contas");
                 });
 
+            modelBuilder.Entity("Financas.Api.Dominio.ItemCompra", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CategoriaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Codigo")
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CompraId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Descricao")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("LancamentoId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Quantidade")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Sequencia")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Unidade")
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("ValorPago")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("ValorTotal")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("ValorUnitario")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CategoriaId");
+
+                    b.HasIndex("Descricao");
+
+                    b.HasIndex("LancamentoId");
+
+                    b.HasIndex("CompraId", "Sequencia")
+                        .IsUnique();
+
+                    b.ToTable("ItensCompra");
+                });
+
             modelBuilder.Entity("Financas.Api.Dominio.Lancamento", b =>
                 {
                     b.Property<Guid>("Id")
@@ -160,6 +266,9 @@ namespace Financas.Api.Dados.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<Guid?>("CategoriaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("CompraId")
                         .HasColumnType("TEXT");
 
                     b.Property<Guid?>("ContaDestinoId")
@@ -220,6 +329,8 @@ namespace Financas.Api.Dados.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CategoriaId");
+
+                    b.HasIndex("CompraId");
 
                     b.HasIndex("ContaDestinoId");
 
@@ -411,6 +522,39 @@ namespace Financas.Api.Dados.Migrations
                     b.ToTable("Regras");
                 });
 
+            modelBuilder.Entity("Financas.Api.Dominio.Compra", b =>
+                {
+                    b.HasOne("Financas.Api.Dominio.Conta", null)
+                        .WithMany()
+                        .HasForeignKey("ContaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Financas.Api.Dominio.ItemCompra", b =>
+                {
+                    b.HasOne("Financas.Api.Dominio.Categoria", "Categoria")
+                        .WithMany()
+                        .HasForeignKey("CategoriaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Financas.Api.Dominio.Compra", "Compra")
+                        .WithMany("Itens")
+                        .HasForeignKey("CompraId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Financas.Api.Dominio.Lancamento", null)
+                        .WithMany()
+                        .HasForeignKey("LancamentoId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Categoria");
+
+                    b.Navigation("Compra");
+                });
+
             modelBuilder.Entity("Financas.Api.Dominio.Lancamento", b =>
                 {
                     b.HasOne("Financas.Api.Dominio.Categoria", "Categoria")
@@ -476,6 +620,11 @@ namespace Financas.Api.Dados.Migrations
                     b.Navigation("Categoria");
 
                     b.Navigation("Conta");
+                });
+
+            modelBuilder.Entity("Financas.Api.Dominio.Compra", b =>
+                {
+                    b.Navigation("Itens");
                 });
 #pragma warning restore 612, 618
         }

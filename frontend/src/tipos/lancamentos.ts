@@ -29,6 +29,8 @@ export interface Lancamento {
   atualizadoEm: string
   juros: number | null
   valorVariavel: boolean
+  /** Veio de uma nota fiscal: itens em /compras/{compraId}. */
+  compraId: string | null
 }
 
 export interface AuditLog {

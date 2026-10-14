@@ -18,6 +18,8 @@ public partial class AppDbContext(DbContextOptions<AppDbContext> options) : DbCo
     public DbSet<PeriodoSalvo> PeriodosSalvos => Set<PeriodoSalvo>();
     public DbSet<Configuracao> Configuracoes => Set<Configuracao>();
     public DbSet<PagamentoPlanejado> PagamentosPlanejados => Set<PagamentoPlanejado>();
+    public DbSet<Compra> Compras => Set<Compra>();
+    public DbSet<ItemCompra> ItensCompra => Set<ItemCompra>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder builder)
     {

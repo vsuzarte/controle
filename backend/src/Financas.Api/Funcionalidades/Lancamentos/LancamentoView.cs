@@ -30,7 +30,9 @@ public record LancamentoView(
     DateTime AtualizadoEm,
     decimal? Juros,
     /// <summary>Veio de uma conta do mês com valor que muda (luz, água): pagar mais não é juros.</summary>
-    bool ValorVariavel)
+    bool ValorVariavel,
+    /// <summary>Veio de uma nota fiscal: os itens estão em /compras/{CompraId}.</summary>
+    Guid? CompraId)
 {
     public static LancamentoView De(Lancamento l) => new(
         l.Id, l.Tipo, l.Status, l.Descricao, l.Valor, l.Data,
@@ -38,5 +40,5 @@ public record LancamentoView(
         l.CategoriaId, l.Categoria?.Nome, l.Categoria?.Cor, l.Categoria?.Icone,
         l.FormaPagamento, l.Observacao, l.Programado, l.RegraId, l.Sequencia,
         l.Regra?.Modo == ModoRegra.Parcelado ? l.Regra.Parcelas : null,
-        l.FaturaMes, l.EstornoDeId, l.MotivoCancelamento, l.CriadoEm, l.AtualizadoEm, l.Juros, l.Regra?.ValorVariavel ?? false);
+        l.FaturaMes, l.EstornoDeId, l.MotivoCancelamento, l.CriadoEm, l.AtualizadoEm, l.Juros, l.Regra?.ValorVariavel ?? false, l.CompraId);
 }

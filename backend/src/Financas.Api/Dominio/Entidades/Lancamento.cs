@@ -31,6 +31,9 @@ public class Lancamento : IAuditavel
     /// <summary>Parte do valor pago que foi juros/multa por atraso (informada ao confirmar o pagamento).</summary>
     public decimal? Juros { get; set; }
 
+    /// <summary>Veio de uma nota fiscal importada (os itens ficam na compra).</summary>
+    public Guid? CompraId { get; set; }
+
     public Guid? EstornoDeId { get; set; }
     public string? MotivoCancelamento { get; set; }
     public DateTime CriadoEm { get; set; } = DateTime.UtcNow;

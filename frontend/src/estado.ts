@@ -19,6 +19,10 @@ export const estado = reactive({
   historico: { aberto: false, entidadeId: '', titulo: '' },
   pagarFatura: { aberto: false, cartaoId: '', cartao: '', mes: '', vencimento: '', restante: 0 },
   moverParcelas: { aberto: false, regraId: '', descricao: '' },
+  /** Lançar pela nota fiscal (QR code ou link). */
+  notaFiscal: { aberto: false },
+  /** Ver os itens de uma compra importada. */
+  compra: { aberto: false, id: '' },
 })
 
 export const contasAtivas = computed(() => estado.contas.filter((c) => c.ativa))
@@ -69,6 +73,16 @@ export function pagarFatura(f: { cartaoId: string; cartao: string; mes: string; 
 /** Compra parcelada no mês errado: abre o diálogo para mover todas as parcelas. */
 export function moverParcelas(regraId: string, descricao: string) {
   estado.moverParcelas = { aberto: true, regraId, descricao }
+}
+
+/** Abre a leitura de nota fiscal (fecha o formulário de lançamento, se estiver aberto). */
+export function lerNotaFiscal() {
+  estado.formulario.aberto = false
+  estado.notaFiscal = { aberto: true }
+}
+
+export function verCompra(id: string) {
+  estado.compra = { aberto: true, id }
 }
 
 export function verHistorico(entidadeId: string, titulo: string) {

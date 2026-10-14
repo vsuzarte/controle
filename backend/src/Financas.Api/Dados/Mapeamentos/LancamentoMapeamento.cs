@@ -17,6 +17,8 @@ public class LancamentoMapeamento : IEntityTypeConfiguration<Lancamento>
         e.HasOne<Lancamento>().WithMany().HasForeignKey(x => x.EstornoDeId).OnDelete(DeleteBehavior.Restrict);
         e.HasIndex(x => x.Data);
         e.HasIndex(x => x.FaturaMes);
+        // Sem chave estrangeira de propósito: no SQLite, criar uma em tabela existente recriaria a tabela (e seus gatilhos).
+        e.HasIndex(x => x.CompraId);
         // SQLite trata NULLs como distintos: lançamentos avulsos não colidem.
         e.HasIndex(x => new { x.RegraId, x.Sequencia }).IsUnique();
     }

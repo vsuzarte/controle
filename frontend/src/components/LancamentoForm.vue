@@ -2,7 +2,7 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useDisplay } from 'vuetify'
 import { api } from '../api'
-import { alterado, confirmarLancamento, contasAtivas, contasPagadoras, erro, estado } from '../estado'
+import { alterado, confirmarLancamento, contasAtivas, contasPagadoras, erro, estado, lerNotaFiscal } from '../estado'
 import { brl, dataBr, hojeIso, nomeMes, somarDias, somarMeses } from '../formato'
 import { FORMAS, TIPOS_CONTA, type FormaPagamento, type Lancamento, type StatusLancamento, type TipoLancamento } from '../tipos'
 import CampoValor from './CampoValor.vue'
@@ -239,7 +239,10 @@ const corTipo = computed(() => TIPOS.find((t) => t.valor === f.tipo)!.cor)
           <v-btn icon="mdi-close" variant="text" size="small" aria-label="Fechar" @click="estado.formulario.aberto = false" />
         </template>
         <v-card-title class="text-center font-weight-bold">{{ editando ? 'Corrigir lançamento' : 'Novo lançamento' }}</v-card-title>
-        <template #append><div style="width: 40px" /></template>
+        <template #append>
+          <v-btn v-if="!editando" icon="mdi-qrcode-scan" variant="text" size="small" color="primary" title="Lançar pela nota fiscal (QR code)" aria-label="Lançar pela nota fiscal" @click="lerNotaFiscal()" />
+          <div v-else style="width: 40px" />
+        </template>
       </v-card-item>
 
       <div class="px-4 pt-2" :class="'text-' + corTipo">

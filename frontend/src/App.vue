@@ -9,7 +9,9 @@ import { TEMAS, preferenciaTema, proximoTema } from './tema'
 import LancamentoForm from './components/LancamentoForm.vue'
 import ConfirmarDialog from './components/ConfirmarDialog.vue'
 import HistoricoDialog from './components/HistoricoDialog.vue'
+import CompraDialog from './components/CompraDialog.vue'
 import MoverParcelasDialog from './components/MoverParcelasDialog.vue'
+import NotaFiscalDialog from './components/NotaFiscalDialog.vue'
 import PagarFaturaDialog from './components/PagarFaturaDialog.vue'
 
 const { mdAndUp, height } = useDisplay()
@@ -33,6 +35,7 @@ const menu = [
   { to: '/planejamento', titulo: 'Planejamento', icone: 'mdi-chart-donut', iconeAtivo: 'mdi-chart-donut' },
   { to: '/cartoes', titulo: 'Cartões', icone: 'mdi-credit-card-outline', iconeAtivo: 'mdi-credit-card' },
   { to: '/relatorios', titulo: 'Relatórios', icone: 'mdi-chart-line', iconeAtivo: 'mdi-chart-line' },
+  { to: '/compras', titulo: 'O que comprei', icone: 'mdi-basket-outline', iconeAtivo: 'mdi-basket' },
   { to: '/cadastros', titulo: 'Ajustes', icone: 'mdi-cog-outline', iconeAtivo: 'mdi-cog' },
 ]
 const barraEsquerda = menu.slice(0, 2)
@@ -199,6 +202,8 @@ onMounted(() => {
       <HistoricoDialog v-if="pronto" />
       <PagarFaturaDialog v-if="pronto" />
       <MoverParcelasDialog v-if="pronto" />
+      <NotaFiscalDialog v-if="pronto" />
+      <CompraDialog v-if="pronto" />
     </template>
 
     <v-snackbar v-model="estado.aviso.mostrar" :color="estado.aviso.cor" timeout="3500" location="top" rounded="lg">
