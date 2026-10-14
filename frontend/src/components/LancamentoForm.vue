@@ -3,10 +3,10 @@ import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useDisplay } from 'vuetify'
 import { api } from '../api'
 import { alterado, confirmarLancamento, contasAtivas, erro, estado } from '../estado'
-import { brl, dataBr, hojeIso, somarDias } from '../formato'
+import { brl, dataBr, hojeIso, nomeMes, somarDias, somarMeses } from '../formato'
 import { FORMAS, TIPOS_CONTA, type FormaPagamento, type Lancamento, type StatusLancamento, type TipoLancamento } from '../tipos'
 import CampoValor from './CampoValor.vue'
-import { faltaNoVale as calcularFalta, passaDoLimite as calcularLimite } from '../regras'
+import { calcularParcelas, faltaNoVale as calcularFalta, faturaDaCompra, passaDoLimite as calcularLimite, type ModoParcela } from '../regras'
 
 const { smAndDown } = useDisplay()
 const salvando = ref(false)
@@ -36,6 +36,27 @@ const f = reactive({
 })
 
 const editando = computed(() => estado.formulario.editar)
+
+// ----- Parcelas: digitar o total (divide) ou o valor de cada parcela (multiplica) -----
+const modoParcela = ref<ModoParcela>((() => { try { return localStorage.getItem('fin.parcela.modo') === 'parcela' ? 'parcela' : 'total' } catch { return 'total' } })())
+watch(modoParcela, (v) => { try { localStorage.setItem('fin.parcela.modo', v) } catch { /* sem storage */ } })
+const parcelado = computed(() => f.tipo === 'Despesa' && !editando.value && f.parcelas > 1)
+const calculo = computed(() => (parcelado.value ? calcularParcelas(f.valor, f.parcelas, modoParcela.value) : null))
+/** O que vai para o servidor: sempre o total da compra (ele divide em parcelas). */
+const valorTotal = computed(() => calculo.value?.total ?? f.valor)
+const rotuloValor = computed(() => (!parcelado.value ? 'Valor' : modoParcela.value === 'parcela' ? 'Valor da parcela' : 'Valor total'))
+/** "1ª na fatura de nov/26, última em ago/27" (cartão) ou "1ª em 15/10/2026, última em ago/27". */
+const quandoParcelas = computed(() => {
+  if (!parcelado.value) return ''
+  const c = conta.value
+  const primeiro = c?.tipo === 'CartaoCredito' && c.diaFechamento && c.diaVencimento
+    ? faturaDaCompra(f.data, c.diaFechamento, c.diaVencimento)
+    : f.data.slice(0, 7)
+  const ultimo = somarMeses(primeiro, f.parcelas - 1)
+  return c?.tipo === 'CartaoCredito'
+    ? `1ª na fatura de ${nomeMes(primeiro, true)}, última em ${nomeMes(ultimo, true)}`
+    : `1ª em ${dataBr(f.data)}, última em ${nomeMes(ultimo, true)}`
+})
 const conta = computed(() => estado.contas.find((c) => c.id === f.contaId))
 const ehCartao = computed(() => conta.value?.tipo === 'CartaoCredito')
 const ehVale = computed(() => conta.value?.tipo === 'Beneficio')
@@ -47,7 +68,8 @@ const contasComplemento = computed(() => contasAtivas.value.filter((c) => c.tipo
 /** Compra no cartão acima do limite disponível: só avisa (o banco é quem recusa). */
 const passaDoLimite = computed(() => {
   if (!ehCartao.value || editando.value || f.tipo !== 'Despesa') return null
-  return calcularLimite(f.valor, conta.value?.limite, conta.value?.limiteUsado)
+  // Parcelado ocupa o limite inteiro na hora (como o banco faz).
+  return calcularLimite(valorTotal.value, conta.value?.limite, conta.value?.limiteUsado)
 })
 const futura = computed(() => f.data > hojeIso())
 const hoje = computed(() => hojeIso())
@@ -164,7 +186,7 @@ async function salvar(outro = false) {
     const status: StatusLancamento | null = ehCartao.value ? null : f.pago ? 'Realizado' : 'Previsto'
     const corpo = {
       descricao: descricaoPadrao(),
-      valor: f.valor,
+      valor: valorTotal.value,
       data: f.data,
       contaId: f.contaId,
       contaDestinoId: f.tipo === 'Transferencia' ? f.contaDestinoId : null,
@@ -184,7 +206,7 @@ async function salvar(outro = false) {
       lembrar('conta.' + f.tipo, f.contaId)
       lembrar('categoria.' + f.tipo, f.categoriaId)
       lembrar('forma.' + f.tipo, f.formaPagamento)
-      alterado(f.parcelas > 1 ? `Compra lançada em ${f.parcelas}x` : 'Lançamento salvo')
+      alterado(f.parcelas > 1 ? `Compra lançada em ${f.parcelas}x (total ${brl(valorTotal.value ?? 0)})` : 'Lançamento salvo')
     }
     if (outro) {
       Object.assign(f, { valor: null, descricao: '', parcelas: 1, observacao: '' })
@@ -226,7 +248,8 @@ const corTipo = computed(() => TIPOS.find((t) => t.valor === f.tipo)!.cor)
             <v-btn v-for="t in TIPOS" :key="t.valor" :value="t.valor" :prepend-icon="t.icone">{{ t.titulo }}</v-btn>
           </v-btn-toggle>
         </div>
-        <CampoValor ref="campoValor" v-model="f.valor" grande label="Valor" />
+        <CampoValor ref="campoValor" v-model="f.valor" grande :label="rotuloValor" />
+        <div v-if="parcelado" class="text-center text-caption font-weight-bold" data-testid="rotulo-valor">{{ rotuloValor }}</div>
         <div v-if="tentouSalvar && erros.valor" class="text-error text-caption text-center">{{ erros.valor }}</div>
       </div>
 
@@ -309,11 +332,23 @@ const corTipo = computed(() => TIPOS.find((t) => t.valor === f.tipo)!.cor)
               <span class="font-weight-bold text-center" style="min-width: 36px" data-testid="parcelas">{{ f.parcelas }}x</span>
               <v-btn icon="mdi-plus" variant="text" aria-label="Mais parcelas" @click="f.parcelas = Math.min(120, f.parcelas + 1)" />
             </v-sheet>
-            <span class="text-body-2 text-medium-emphasis">
-              <template v-if="f.parcelas > 1 && f.valor">{{ f.parcelas }}x de {{ brl(f.valor / f.parcelas) }} · o valor digitado é o total</template>
-              <template v-else>À vista</template>
-            </span>
+            <span v-if="!parcelado" class="text-body-2 text-medium-emphasis">À vista</span>
+            <v-btn-toggle v-else v-model="modoParcela" mandatory density="compact" variant="outlined" divided rounded="lg" color="primary" aria-label="O valor digitado é">
+              <v-btn value="total" size="small">Valor total</v-btn>
+              <v-btn value="parcela" size="small">Valor da parcela</v-btn>
+            </v-btn-toggle>
           </div>
+          <v-alert v-if="parcelado" type="info" variant="tonal" density="compact" rounded="lg" class="mt-2 text-body-2" icon="mdi-calculator-variant-outline" data-testid="resumo-parcelas">
+            <template v-if="calculo">
+              <div class="font-weight-bold">
+                <template v-if="calculo.parcelas[0] === calculo.parcelas[1]">{{ f.parcelas }}x de {{ brl(calculo.parcelas[1]) }}</template>
+                <template v-else>1x de {{ brl(calculo.parcelas[0]) }} + {{ f.parcelas - 1 }}x de {{ brl(calculo.parcelas[1]) }}</template>
+                = {{ brl(calculo.total) }}
+              </div>
+              <div class="text-caption">{{ quandoParcelas }}</div>
+            </template>
+            <template v-else>Digite {{ modoParcela === 'parcela' ? 'o valor de cada parcela' : 'o valor total da compra' }}: o sistema calcula o resto.</template>
+          </v-alert>
         </template>
 
         <!-- Já pagou? -->

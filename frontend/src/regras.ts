@@ -83,3 +83,34 @@ export function dataAoMover(
   if (natural && !i.pagoCom) return null
   return coluna.atual && coluna.inicio < hoje ? hoje : coluna.inicio
 }
+
+// ---------------- Parcelas ----------------
+
+export type ModoParcela = 'total' | 'parcela'
+
+/** Mesma divisão do backend: parcelas iguais e os centavos que sobram na primeira (a soma fecha com o total). */
+export function dividirParcelas(total: number, n: number): number[] {
+  const centavosTotal = Math.round(total * 100)
+  const base = Math.floor(centavosTotal / n)
+  return Array.from({ length: n }, (_, i) => (i === 0 ? base + (centavosTotal - base * n) : base) / 100)
+}
+
+/**
+ * Valor digitado → total da compra e parcelas. No modo "total" o valor é dividido;
+ * no modo "parcela" ele é o valor de cada parcela e o total é a multiplicação.
+ */
+export function calcularParcelas(valor: number | null | undefined, n: number, modo: ModoParcela) {
+  if (!valor || n < 1) return null
+  const total = modo === 'parcela' ? centavos(valor * n) : valor
+  return { total, parcelas: dividirParcelas(total, n) }
+}
+
+/** Mês (AAAA-MM) da fatura em que cai uma compra no cartão — mesma regra do backend (compra no dia do fechamento ou depois vai para a seguinte). */
+export function faturaDaCompra(data: string, fechamento: number, vencimento: number): string {
+  const [a, m, d] = data.split('-').map(Number)
+  const diasNoMes = new Date(a, m, 0).getDate()
+  let mes = new Date(a, m - 1, 1)
+  if (d >= Math.min(fechamento, diasNoMes)) mes = new Date(a, m, 1)
+  if (vencimento <= fechamento) mes = new Date(mes.getFullYear(), mes.getMonth() + 1, 1)
+  return `${mes.getFullYear()}-${String(mes.getMonth() + 1).padStart(2, '0')}`
+}

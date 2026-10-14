@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dataAoMover, faltaNoVale, jurosPorPadrao, pagoAMais, passaDoLimite, separarVencimentos, situacaoCard } from './regras'
+import { calcularParcelas, dataAoMover, dividirParcelas, faltaNoVale, faturaDaCompra, jurosPorPadrao, pagoAMais, passaDoLimite, separarVencimentos, situacaoCard } from './regras'
 import { dataBr, nomeMes, parseValor, somarDias, somarMeses } from './formato'
 import type { Alerta } from './tipos'
 
@@ -103,5 +103,28 @@ describe('quadro da previsão', () => {
 
   it('adiantar para o período de hoje planeja para hoje', () => {
     expect(dataAoMover({ data: '2026-10-28', pagavelAte: null, pagoCom: null }, agora, '2026-10-15')).toBe('2026-10-15')
+  })
+})
+
+describe('parcelas', () => {
+  it('divide o total como o backend, com os centavos na primeira', () => {
+    expect(dividirParcelas(600, 3)).toEqual([200, 200, 200])
+    expect(dividirParcelas(100, 3)).toEqual([33.34, 33.33, 33.33])
+    expect(dividirParcelas(4200, 10).reduce((a, b) => a + b, 0)).toBeCloseTo(4200, 2)
+  })
+
+  it('valor total: divide; valor da parcela: multiplica', () => {
+    expect(calcularParcelas(600, 3, 'total')).toEqual({ total: 600, parcelas: [200, 200, 200] })
+    expect(calcularParcelas(89.9, 10, 'parcela')).toEqual({ total: 899, parcelas: Array(10).fill(89.9) })
+    expect(calcularParcelas(33.33, 3, 'parcela')?.total).toBe(99.99)
+    expect(calcularParcelas(null, 3, 'total')).toBeNull()
+  })
+
+  it('fatura da compra segue o dia de fechamento', () => {
+    expect(faturaDaCompra('2026-10-15', 3, 10)).toBe('2026-11') // depois do fechamento: próxima
+    expect(faturaDaCompra('2026-10-02', 3, 10)).toBe('2026-10')
+    expect(faturaDaCompra('2026-10-03', 3, 10)).toBe('2026-11') // no dia do fechamento: próxima
+    expect(faturaDaCompra('2026-10-15', 20, 28)).toBe('2026-10')
+    expect(faturaDaCompra('2026-10-15', 25, 5)).toBe('2026-11') // vence no mês seguinte ao fechamento
   })
 })
