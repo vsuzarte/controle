@@ -66,3 +66,9 @@ body, .v-application, .v-overlay-container, .v-application [class*='text-'], .v-
   box-shadow: 0 10px 24px -10px rgba(14, 159, 110, 0.8);
 }
 .v-bottom-navigation .botao-mais .v-icon { font-size: 28px; opacity: 1 !important; }
+
+/* Rodapé dos diálogos: respiro nas bordas e espaço entre os botões. */
+.v-card-actions { gap: 10px; padding: 12px 20px 20px !important; min-height: 64px; }
+.v-card-actions .v-btn ~ .v-btn { margin-inline-start: 0 !important; }
+.v-card-actions .v-btn { padding-inline: 18px; }
+.v-dialog > .v-overlay__content > .v-card > .v-card-text { padding-inline: 20px; }

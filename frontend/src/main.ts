@@ -15,6 +15,8 @@ const router = createRouter({
     { path: '/lancamentos', component: () => import('./views/Lancamentos.vue') },
     { path: '/planejamento', component: () => import('./views/Planejamento.vue') },
     { path: '/cartoes', component: () => import('./views/Cartoes.vue') },
+    { path: '/previsao', component: () => import('./views/Previsao.vue') },
+    { path: '/relatorios', component: () => import('./views/Relatorios.vue') },
     { path: '/contas-do-mes', component: () => import('./views/ContasDoMes.vue') },
     { path: '/recorrencias', redirect: '/contas-do-mes' },
     { path: '/cadastros', component: () => import('./views/Cadastros.vue') },
@@ -57,7 +59,6 @@ const vuetify = createVuetify({
     VBtn: { rounded: 'lg', class: 'text-none', style: 'letter-spacing: 0' },
     VChip: { rounded: 'lg' },
     VDialog: { transition: 'dialog-bottom-transition' },
-    VList: { bgColor: 'transparent' },
   },
 })
 

@@ -17,7 +17,12 @@ public record Alerta(
     TipoLancamento? TipoLancamento,
     Guid? LancamentoId,
     Guid? CartaoId,
-    DateOnly? FaturaMes);
+    DateOnly? FaturaMes,
+    Guid? RegraId = null);
+
+/// <summary>Vale-refeição/alimentação: saldo, próxima recarga e até quando dura no ritmo dos últimos 30 dias.</summary>
+public record BeneficioView(Guid Id, string Nome, string? Cor, decimal Saldo, DateOnly? ProximaRecarga, decimal? ValorRecarga,
+    decimal GastoPorDia, DateOnly? DuraAte);
 
 /// <summary>Gasto = tudo da categoria no mês; Variavel = só o do dia a dia (o que o orçamento controla).</summary>
 public record GastoCategoria(Guid CategoriaId, string Categoria, string? Cor, decimal Gasto, decimal Variavel, decimal? Orcado);
@@ -36,9 +41,11 @@ public record ResumoView(
     decimal VariavelRestante,
     decimal SaldoProjetado,
     PlanejamentoView Planejamento,
-    List<GastoCategoria> GastosPorCategoria);
+    List<GastoCategoria> GastosPorCategoria,
+    PrevisaoView Previsao,
+    List<BeneficioView> Beneficios);
 
-public class ResumoService(AppDbContext db, IRelogio relogio, PlanejamentoService planejamento, CartaoService cartoes)
+public class ResumoService(AppDbContext db, IRelogio relogio, PlanejamentoService planejamento, CartaoService cartoes, PrevisaoService previsoes)
 {
     public const int DiasAlerta = 7;
 
@@ -56,24 +63,28 @@ public class ResumoService(AppDbContext db, IRelogio relogio, PlanejamentoServic
         var saldoContas = contas
             .Select(c => new SaldoConta(c.Id, c.Nome, c.Tipo, c.Cor, c.SaldoInicial + saldos.GetValueOrDefault(c.Id)))
             .ToList();
-        var idsCartoes = contas.Where(c => c.EhCartao).Select(c => c.Id).ToHashSet();
-        var saldoDisponivel = saldoContas.Where(c => !idsCartoes.Contains(c.Id)).Sum(c => c.Saldo);
+        var idsDisponiveis = contas.Where(c => c.EhDisponivel).Select(c => c.Id).ToHashSet();
+        var saldoDisponivel = saldoContas.Where(c => idsDisponiveis.Contains(c.Id)).Sum(c => c.Saldo);
+        var previsao = await previsoes.Obter();
+        // Vencimentos: tudo o que está pendente até o próximo salário (no mínimo os próximos 7 dias).
+        var limiteAlertas = previsao.Fim > hoje.AddDays(DiasAlerta) ? previsao.Fim : hoje.AddDays(DiasAlerta);
 
         var doMes = await db.Lancamentos.Include(l => l.Categoria)
             .Where(l => l.Status == StatusLancamento.Realizado && l.Tipo != TipoLancamento.Transferencia
                         && l.Data >= inicioMes && l.Data <= fimMes)
             .ToListAsync();
 
-        // Pendências em contas (não cartão): o que ainda vai sair/entrar do saldo disponível.
-        var pendentes = await db.Lancamentos.Include(l => l.Conta)
-            .Where(l => l.Status == StatusLancamento.Previsto && l.Data <= fimMes)
+        // Pendências no dinheiro disponível (sem cartão e vale): o que ainda vai sair/entrar do saldo.
+        var todosPendentes = await db.Lancamentos.Include(l => l.Conta)
+            .Where(l => l.Status == StatusLancamento.Previsto && l.Data <= (limiteAlertas > fimMes ? limiteAlertas : fimMes))
             .OrderBy(l => l.Data)
             .ToListAsync();
-        pendentes = pendentes.Where(l => !l.Conta!.EhCartao).ToList();
+        todosPendentes = todosPendentes.Where(l => l.Conta!.EhDisponivel).ToList();
+        var pendentes = todosPendentes.Where(l => l.Data <= fimMes).ToList();
 
-        var alertas = pendentes
-            .Where(l => l.Data <= hoje.AddDays(DiasAlerta) && l.Tipo != TipoLancamento.Transferencia)
-            .Select(l => NovoAlerta(hoje, l.Data, l.Descricao, l.Valor, l.Tipo, l.Id, null, null))
+        var alertas = todosPendentes
+            .Where(l => l.Data <= limiteAlertas && l.Tipo != TipoLancamento.Transferencia)
+            .Select(l => NovoAlerta(hoje, l.Data, l.Descricao, l.Valor, l.Tipo, l.Id, null, null) with { RegraId = l.RegraId })
             .ToList();
 
         var faturasAbertas = new List<FaturaView>();
@@ -84,7 +95,7 @@ public class ResumoService(AppDbContext db, IRelogio relogio, PlanejamentoServic
             foreach (var f in faturas.Where(f => f.Restante > 0 || f.Status == StatusFatura.Aberta))
             {
                 if (f.Vencimento <= fimMes) faturasAPagar += f.Restante;
-                if (f.Restante > 0 && f.Vencimento <= hoje.AddDays(DiasAlerta))
+                if (f.Restante > 0 && f.Vencimento <= limiteAlertas)
                     alertas.Add(NovoAlerta(hoje, f.Vencimento, $"Fatura {cartao.Nome} {f.Mes:MM/yyyy}", f.Restante,
                         TipoLancamento.Despesa, null, cartao.Id, f.Mes));
                 if (f.Status is StatusFatura.Aberta or StatusFatura.Fechada or StatusFatura.Vencida)
@@ -121,7 +132,31 @@ public class ResumoService(AppDbContext db, IRelogio relogio, PlanejamentoServic
             variavelRestante,
             saldoDisponivel + receitasAReceber - despesasAPagar - faturasAPagar - variavelRestante,
             plano,
-            gastos);
+            gastos,
+            previsao,
+            await Beneficios(contas.Where(c => c.EhBeneficio).ToList(), saldoContas, hoje));
+    }
+
+    private async Task<List<BeneficioView>> Beneficios(List<Conta> vales, List<SaldoConta> saldos, DateOnly hoje)
+    {
+        if (vales.Count == 0) return [];
+        var ids = vales.Select(v => v.Id).ToList();
+        var desde = hoje.AddDays(-30);
+        var gastos = await db.Lancamentos
+            .Where(l => ids.Contains(l.ContaId) && l.Tipo == TipoLancamento.Despesa && l.Status == StatusLancamento.Realizado
+                        && l.Data > desde && l.Data <= hoje)
+            .Select(l => new { l.ContaId, l.Valor }).ToListAsync();
+        var recargas = await db.Lancamentos
+            .Where(l => ids.Contains(l.ContaId) && l.Tipo == TipoLancamento.Receita && l.Status == StatusLancamento.Previsto && l.Data > hoje)
+            .OrderBy(l => l.Data).Select(l => new { l.ContaId, l.Data, l.Valor }).ToListAsync();
+        return vales.Select(v =>
+        {
+            var saldo = saldos.First(s => s.Id == v.Id).Saldo;
+            var porDia = decimal.Round(gastos.Where(g => g.ContaId == v.Id).Sum(g => g.Valor) / 30m, 2);
+            var recarga = recargas.FirstOrDefault(r => r.ContaId == v.Id);
+            DateOnly? duraAte = porDia > 0 && saldo > 0 ? hoje.AddDays((int)Math.Floor(saldo / porDia)) : null;
+            return new BeneficioView(v.Id, v.Nome, v.Cor, saldo, recarga?.Data, recarga?.Valor, porDia, duraAte);
+        }).ToList();
     }
 
     /// <summary>Movimento líquido realizado de cada conta até a data (sem o saldo inicial).</summary>

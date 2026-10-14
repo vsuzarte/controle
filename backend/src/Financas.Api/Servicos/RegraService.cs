@@ -44,6 +44,16 @@ public class RegraService(AppDbContext db, IRelogio relogio)
             regra.Intervalo = 1;
             regra.DataFim = null;
         }
+        if (regra.Modo == ModoRegra.Recorrente)
+        {
+            AplicarVencimento(regra, dto.Vencimento, dto.DiaUtilNumero, null);
+            // A primeira ocorrência é a primeira data da regra a partir da data informada.
+            if (regra.Vencimento is not (null or RegraVencimento.DiaFixo) && Calendario.Ocorrencia(regra, 1) < dto.DataInicio)
+                regra.DataInicio = Calendario.InicioMes(dto.DataInicio).AddMonths(1);
+            if (regra.Vencimento is not (null or RegraVencimento.DiaFixo))
+                regra.DataInicio = Calendario.Ocorrencia(regra, 1);
+            regra.IniciaPeriodo = regra.Tipo == TipoLancamento.Receita ? dto.IniciaPeriodo : null;
+        }
         if (regra.DataFim is { } fim && fim < regra.DataInicio)
             throw new RegraNegocioException("A data final não pode ser anterior à data inicial.");
 
@@ -70,7 +80,12 @@ public class RegraService(AppDbContext db, IRelogio relogio)
             if (dto.DataFim is { } fim && fim < regra.DataInicio)
                 throw new RegraNegocioException("A data final não pode ser anterior à data inicial.");
             regra.DataFim = dto.DataFim;
+            if (regra.Tipo == TipoLancamento.Receita && dto.IniciaPeriodo is not null) regra.IniciaPeriodo = dto.IniciaPeriodo;
         }
+
+        // Mudou o dia do vencimento (ex.: "dia 9" para "5º dia útil"): recalcula as datas dos previstos
+        // a partir deste mês. O que já foi pago ou cancelado fica como está.
+        var mudouVencimento = regra.Modo == ModoRegra.Recorrente && AplicarVencimento(regra, dto.Vencimento, dto.DiaUtilNumero, dto.Dia);
 
         var previstos = await db.Lancamentos
             .Where(l => l.RegraId == id && l.Status == StatusLancamento.Previsto)
@@ -85,6 +100,11 @@ public class RegraService(AppDbContext db, IRelogio relogio)
                 l.Status = StatusLancamento.Cancelado;
                 l.MotivoCancelamento = "Data final da recorrência alterada";
                 continue;
+            }
+            if (mudouVencimento && l.Data >= Calendario.InicioMes(Hoje) && l.Sequencia is { } seq)
+            {
+                l.Data = Calendario.Ocorrencia(regra, seq);
+                if (conta.EhCartao) l.FaturaMes = Calendario.FaturaDaCompra(conta, l.Data);
             }
             if (!dto.AplicarAosPrevistos || l.Data < Hoje) continue;
 
@@ -158,22 +178,52 @@ public class RegraService(AppDbContext db, IRelogio relogio)
 
         var automaticos = await db.Lancamentos
             .Include(l => l.Conta).Include(l => l.Regra)
-            .Where(l => l.Status == StatusLancamento.Previsto && l.RegraId != null && l.Data <= Hoje
-                        && l.Tipo == TipoLancamento.Despesa)
+            .Where(l => l.Status == StatusLancamento.Previsto && l.Data <= Hoje && l.Tipo != TipoLancamento.Transferencia)
             .ToListAsync();
         var confirmados = 0;
-        foreach (var l in automaticos.Where(l =>
-                     (l.Conta!.EhCartao || l.FormaPagamento == FormaPagamento.DebitoAutomatico)
-                     && !l.Regra!.ValorVariavel))
+        foreach (var l in automaticos.Where(ConfirmaSozinho))
         {
             l.Status = StatusLancamento.Realizado;
             confirmados++;
         }
         if (confirmados > 0)
         {
-            db.DefinirAuditoria("Confirmação automática", "Cobrança automática no cartão/débito");
+            db.DefinirAuditoria("Confirmação automática", "Cobrança no cartão/débito automático ou recarga do vale");
             await db.SaveChangesAsync();
         }
+    }
+
+    /// <summary>
+    /// O que acontece sem o usuário fazer nada: compra no cartão quando chega a data, cobrança fixa no
+    /// cartão/débito automático e recarga do vale. Valores variáveis (ex.: conta de luz) esperam confirmação.
+    /// </summary>
+    private static bool ConfirmaSozinho(Lancamento l)
+    {
+        if (l.Regra is { ValorVariavel: true }) return false;
+        if (l.Tipo == TipoLancamento.Despesa)
+            return l.Conta!.EhCartao || (l.RegraId != null && l.FormaPagamento == FormaPagamento.DebitoAutomatico);
+        return l.RegraId != null && l.Conta!.EhBeneficio;
+    }
+
+    /// <summary>Aplica a forma de vencimento (só regras mensais). Devolve true se a data das ocorrências mudou.</summary>
+    private static bool AplicarVencimento(Regra regra, RegraVencimento? vencimento, int? diaUtil, int? dia)
+    {
+        if (vencimento is null) return false;
+        if (regra.Frequencia != Frequencia.Mensal && vencimento != RegraVencimento.DiaFixo)
+            throw new RegraNegocioException("Dia útil e último dia só valem para contas mensais.");
+        if (vencimento == RegraVencimento.DiaUtil && diaUtil is not (>= 1 and <= 23))
+            throw new RegraNegocioException("Informe qual dia útil (1 a 23).");
+        if (dia is not null and not (>= 1 and <= 31))
+            throw new RegraNegocioException("O dia do vencimento deve ser de 1 a 31.");
+
+        var antes = (regra.Vencimento ?? RegraVencimento.DiaFixo, regra.DiaUtilNumero, regra.DataInicio);
+        regra.Vencimento = vencimento == RegraVencimento.DiaFixo ? null : vencimento;
+        regra.DiaUtilNumero = vencimento == RegraVencimento.DiaUtil ? diaUtil : null;
+        if (regra.Vencimento is null && dia is { } d)
+            regra.DataInicio = new DateOnly(regra.DataInicio.Year, regra.DataInicio.Month, Math.Min(d, DateTime.DaysInMonth(regra.DataInicio.Year, regra.DataInicio.Month)));
+        else if (regra.Vencimento is { } v)
+            regra.DataInicio = Calendario.DataNoMes(regra.DataInicio, v, regra.DiaUtilNumero);
+        return antes != (regra.Vencimento ?? RegraVencimento.DiaFixo, regra.DiaUtilNumero, regra.DataInicio);
     }
 
     public async Task<Regra> Obter(Guid id) =>
@@ -252,6 +302,8 @@ public class RegraService(AppDbContext db, IRelogio relogio)
         if (!conta.Ativa && regra.ContaId != conta.Id) throw new RegraNegocioException($"A conta '{conta.Nome}' está desativada.");
         if (conta.EhCartao && regra.Tipo == TipoLancamento.Receita)
             throw new RegraNegocioException("Receitas programadas não podem cair no cartão de crédito.");
+        if (conta.EhBeneficio && regra.Tipo == TipoLancamento.Despesa)
+            throw new RegraNegocioException("O vale só serve para compras do dia a dia; contas fixas saem de uma conta bancária.");
 
         var categoria = await db.Categorias.FindAsync(categoriaId) ?? throw new RegraNegocioException("Informe a categoria.");
         var tipoEsperado = regra.Tipo == TipoLancamento.Receita ? TipoCategoria.Receita : TipoCategoria.Despesa;

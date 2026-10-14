@@ -17,10 +17,13 @@ export const estado = reactive({
   formulario: { aberto: false, editar: null as Lancamento | null, tipo: 'Despesa' as Lancamento['tipo'] },
   confirmar: { aberto: false, lancamento: null as Lancamento | null, valor: null as number | null },
   historico: { aberto: false, entidadeId: '', titulo: '' },
+  pagarFatura: { aberto: false, cartaoId: '', cartao: '', mes: '', vencimento: '', restante: 0 },
 })
 
 export const contasAtivas = computed(() => estado.contas.filter((c) => c.ativa))
 export const contasNaoCartao = computed(() => contasAtivas.value.filter((c) => c.tipo !== 'CartaoCredito'))
+/** Contas que pagam boletos e faturas: sem cartão e sem vale. */
+export const contasPagadoras = computed(() => contasNaoCartao.value.filter((c) => c.tipo !== 'Beneficio'))
 export const cartoes = computed(() => contasAtivas.value.filter((c) => c.tipo === 'CartaoCredito'))
 
 export async function carregarCadastros() {
@@ -54,6 +57,10 @@ export function editarLancamento(l: Lancamento) {
 
 export function confirmarLancamento(l: Lancamento, valor: number | null = null) {
   estado.confirmar = { aberto: true, lancamento: l, valor }
+}
+
+export function pagarFatura(f: { cartaoId: string; cartao: string; mes: string; vencimento: string; restante: number }) {
+  estado.pagarFatura = { aberto: true, cartaoId: f.cartaoId, cartao: f.cartao, mes: f.mes, vencimento: f.vencimento, restante: f.restante }
 }
 
 export function verHistorico(entidadeId: string, titulo: string) {

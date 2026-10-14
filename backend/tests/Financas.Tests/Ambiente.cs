@@ -22,6 +22,8 @@ public sealed class Ambiente : IDisposable
     public CartaoService Cartoes { get; }
     public PlanejamentoService Planejamento { get; }
     public ResumoService Resumo { get; }
+    public PrevisaoService Previsao { get; }
+    public RelatorioService Relatorios { get; }
 
     public Conta Banco { get; }
     public Conta Poupanca { get; }
@@ -42,7 +44,9 @@ public sealed class Ambiente : IDisposable
         Lancamentos = new LancamentoService(Db, Relogio, Regras);
         Cartoes = new CartaoService(Db, Relogio);
         Planejamento = new PlanejamentoService(Db, Relogio, Regras);
-        Resumo = new ResumoService(Db, Relogio, Planejamento, Cartoes);
+        Previsao = new PrevisaoService(Db, Relogio, Regras, Cartoes);
+        Resumo = new ResumoService(Db, Relogio, Planejamento, Cartoes, Previsao);
+        Relatorios = new RelatorioService(Db);
 
         Banco = new Conta { Nome = "Banco", Tipo = TipoConta.Corrente, SaldoInicial = 1000m };
         Poupanca = new Conta { Nome = "Poupança", Tipo = TipoConta.Poupanca };

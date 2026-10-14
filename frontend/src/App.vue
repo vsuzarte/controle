@@ -8,6 +8,7 @@ import { definirHoje, mesIso } from './formato'
 import LancamentoForm from './components/LancamentoForm.vue'
 import ConfirmarDialog from './components/ConfirmarDialog.vue'
 import HistoricoDialog from './components/HistoricoDialog.vue'
+import PagarFaturaDialog from './components/PagarFaturaDialog.vue'
 
 const { mdAndUp } = useDisplay()
 const route = useRoute()
@@ -21,8 +22,10 @@ const menu = [
   { to: '/', titulo: 'Início', icone: 'mdi-home-variant-outline', iconeAtivo: 'mdi-home-variant' },
   { to: '/lancamentos', titulo: 'Lançamentos', icone: 'mdi-swap-vertical', iconeAtivo: 'mdi-swap-vertical-bold' },
   { to: '/contas-do-mes', titulo: 'Contas do mês', icone: 'mdi-calendar-blank-outline', iconeAtivo: 'mdi-calendar-blank' },
+  { to: '/previsao', titulo: 'Previsão', icone: 'mdi-calendar-clock-outline', iconeAtivo: 'mdi-calendar-clock' },
   { to: '/planejamento', titulo: 'Planejamento', icone: 'mdi-chart-donut', iconeAtivo: 'mdi-chart-donut' },
   { to: '/cartoes', titulo: 'Cartões', icone: 'mdi-credit-card-outline', iconeAtivo: 'mdi-credit-card' },
+  { to: '/relatorios', titulo: 'Relatórios', icone: 'mdi-chart-line', iconeAtivo: 'mdi-chart-line' },
   { to: '/cadastros', titulo: 'Ajustes', icone: 'mdi-cog-outline', iconeAtivo: 'mdi-cog' },
 ]
 const barraEsquerda = menu.slice(0, 2)
@@ -102,7 +105,7 @@ onMounted(() => {
           </template>
           <v-list-item-title class="text-h6 font-weight-bold">Finanças</v-list-item-title>
         </v-list-item>
-        <v-list nav color="primary" class="px-3">
+        <v-list nav color="primary" class="px-3" bg-color="transparent">
           <v-list-item
             v-for="m in menu"
             :key="m.to"
@@ -158,6 +161,7 @@ onMounted(() => {
       <LancamentoForm v-if="pronto" />
       <ConfirmarDialog v-if="pronto" />
       <HistoricoDialog v-if="pronto" />
+      <PagarFaturaDialog v-if="pronto" />
     </template>
 
     <v-snackbar v-model="estado.aviso.mostrar" :color="estado.aviso.cor" timeout="3500" location="top" rounded="lg">

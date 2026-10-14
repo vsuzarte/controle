@@ -1,4 +1,4 @@
-export type TipoConta = 'Corrente' | 'Poupanca' | 'Dinheiro' | 'CarteiraDigital' | 'CartaoCredito'
+export type TipoConta = 'Corrente' | 'Poupanca' | 'Dinheiro' | 'CarteiraDigital' | 'CartaoCredito' | 'Beneficio'
 export type TipoCategoria = 'Receita' | 'Despesa'
 export type TipoLancamento = 'Receita' | 'Despesa' | 'Transferencia'
 export type StatusLancamento = 'Previsto' | 'Realizado' | 'Cancelado'
@@ -6,6 +6,7 @@ export type FormaPagamento =
   | 'Pix' | 'Boleto' | 'DebitoAutomatico' | 'CartaoCredito' | 'CartaoDebito' | 'Dinheiro' | 'Transferencia' | 'Outro'
 export type ModoRegra = 'Recorrente' | 'Parcelado'
 export type Frequencia = 'Semanal' | 'Mensal' | 'Anual'
+export type RegraVencimento = 'DiaFixo' | 'DiaUtil' | 'UltimoDia' | 'UltimoDiaUtil'
 
 export interface Conta {
   id: string
@@ -17,6 +18,9 @@ export interface Conta {
   diaVencimento: number | null
   ativa: boolean
   saldo: number
+  /** Só cartão. */
+  limite: number | null
+  limiteUsado: number | null
 }
 
 export interface Categoria {
@@ -55,6 +59,8 @@ export interface Lancamento {
   motivoCancelamento: string | null
   criadoEm: string
   atualizadoEm: string
+  juros: number | null
+  valorVariavel: boolean
 }
 
 export interface Regra {
@@ -82,6 +88,9 @@ export interface Regra {
   proximaData: string | null
   proximoValor: number | null
   atrasadas: number
+  vencimento: RegraVencimento
+  diaUtilNumero: number | null
+  iniciaPeriodo: boolean
 }
 
 export type StatusFatura = 'Aberta' | 'Fechada' | 'Paga' | 'Vencida' | 'Futura'
@@ -138,6 +147,7 @@ export interface Alerta {
   lancamentoId: string | null
   cartaoId: string | null
   faturaMes: string | null
+  regraId: string | null
 }
 
 export interface Resumo {
@@ -155,6 +165,112 @@ export interface Resumo {
   saldoProjetado: number
   planejamento: Planejamento
   gastosPorCategoria: { categoriaId: string; categoria: string; cor: string | null; gasto: number; variavel: number; orcado: number | null }[]
+  previsao: Previsao
+  beneficios: Beneficio[]
+}
+
+export interface Beneficio {
+  id: string
+  nome: string
+  cor: string | null
+  saldo: number
+  proximaRecarga: string | null
+  valorRecarga: number | null
+  gastoPorDia: number
+  duraAte: string | null
+}
+
+export type TipoItemPrevisao = 'Entrada' | 'Conta' | 'Fatura'
+
+export interface ItemPrevisao {
+  tipo: TipoItemPrevisao
+  descricao: string
+  detalhe: string | null
+  cor: string | null
+  icone: string | null
+  data: string
+  valor: number
+  pago: number
+  pendente: boolean
+  atrasado: boolean
+  lancamentoId: string | null
+  regraId: string | null
+  cartaoId: string | null
+  faturaMes: string | null
+  juros: number | null
+}
+
+export interface PeriodoPrevisao {
+  inicio: string
+  fim: string
+  titulo: string
+  atual: boolean
+  encerrado: boolean
+  saldoInicio: number
+  saldoFim: number
+  entradas: number
+  aReceber: number
+  contas: number
+  contasAPagar: number
+  faturas: number
+  faturasAPagar: number
+  diaADia: number
+  diasRestantes: number
+  porDia: number | null
+  itens: ItemPrevisao[]
+}
+
+export interface Previsao {
+  hoje: string
+  inicio: string
+  fim: string
+  porSalario: boolean
+  periodos: PeriodoPrevisao[]
+  saldoInicio: number
+  saldoFim: number
+  entradas: number
+  contas: number
+  faturas: number
+  diaADia: number
+}
+
+export interface CartaoResumo {
+  id: string
+  nome: string
+  cor: string | null
+  diaFechamento: number
+  diaVencimento: number
+  limite: number | null
+  limiteUsado: number
+  limiteDisponivel: number | null
+  aPagar: Fatura[]
+  aberta: Fatura | null
+}
+
+export interface TodosCartoes {
+  cartoes: CartaoResumo[]
+  totalAPagar: number
+  totalEmAberto: number
+  limiteTotal: number
+  limiteUsadoTotal: number
+}
+
+export interface SerieMensal {
+  id: string | null
+  nome: string
+  cor: string | null
+  icone: string | null
+  valores: number[]
+}
+
+export interface Comparativo {
+  meses: string[]
+  total: SerieMensal
+  categorias: SerieMensal[]
+  contasFixas: SerieMensal[]
+  cartoes: SerieMensal[]
+  juros: SerieMensal
+  jurosDetalhe: Lancamento[]
 }
 
 export interface AuditLog {
@@ -185,4 +301,12 @@ export const TIPOS_CONTA: { value: TipoConta; title: string; icone: string }[] =
   { value: 'CarteiraDigital', title: 'Carteira digital', icone: 'mdi-cellphone' },
   { value: 'Dinheiro', title: 'Dinheiro', icone: 'mdi-cash' },
   { value: 'CartaoCredito', title: 'Cartão de crédito', icone: 'mdi-credit-card' },
+  { value: 'Beneficio', title: 'Vale-refeição / alimentação', icone: 'mdi-food' },
+]
+
+export const VENCIMENTOS: { value: RegraVencimento; title: string }[] = [
+  { value: 'DiaFixo', title: 'Todo mês no mesmo dia' },
+  { value: 'DiaUtil', title: 'N-ésimo dia útil' },
+  { value: 'UltimoDiaUtil', title: 'Último dia útil' },
+  { value: 'UltimoDia', title: 'Último dia do mês' },
 ]

@@ -6,6 +6,7 @@ import { alterado, confirmarLancamento, contasAtivas, erro, estado } from '../es
 import { brl, dataBr, hojeIso, somarDias } from '../formato'
 import { FORMAS, TIPOS_CONTA, type FormaPagamento, type Lancamento, type StatusLancamento, type TipoLancamento } from '../tipos'
 import CampoValor from './CampoValor.vue'
+import { faltaNoVale as calcularFalta, passaDoLimite as calcularLimite } from '../regras'
 
 const { smAndDown } = useDisplay()
 const salvando = ref(false)
@@ -30,11 +31,24 @@ const f = reactive({
   observacao: '',
   faturaMes: null as string | null,
   motivo: '',
+  /** Compra no vale maior que o saldo: conta que paga o resto. */
+  complementoId: null as string | null,
 })
 
 const editando = computed(() => estado.formulario.editar)
 const conta = computed(() => estado.contas.find((c) => c.id === f.contaId))
 const ehCartao = computed(() => conta.value?.tipo === 'CartaoCredito')
+const ehVale = computed(() => conta.value?.tipo === 'Beneficio')
+/** Quanto falta no vale para esta compra (0 = cabe no saldo). */
+const faltaNoVale = computed(() =>
+  ehVale.value && f.tipo === 'Despesa' && !editando.value ? calcularFalta(f.valor, conta.value!.saldo) : 0,
+)
+const contasComplemento = computed(() => contasAtivas.value.filter((c) => c.tipo !== 'Beneficio'))
+/** Compra no cartão acima do limite disponível: só avisa (o banco é quem recusa). */
+const passaDoLimite = computed(() => {
+  if (!ehCartao.value || editando.value || f.tipo !== 'Despesa') return null
+  return calcularLimite(f.valor, conta.value?.limite, conta.value?.limiteUsado)
+})
 const futura = computed(() => f.data > hojeIso())
 const hoje = computed(() => hojeIso())
 const ontem = computed(() => somarDias(hojeIso(), -1))
@@ -50,8 +64,11 @@ const categoriasVisiveis = computed(() => {
   const sel = categorias.value.find((c) => c.id === f.categoriaId)
   return sel && !primeiras.includes(sel) ? [sel, ...primeiras.slice(0, -1)] : primeiras
 })
-const contas = computed(() => contasAtivas.value.filter((c) => f.tipo === 'Despesa' || c.tipo !== 'CartaoCredito'))
-const destinos = computed(() => contasAtivas.value.filter((c) => c.id !== f.contaId))
+const contas = computed(() =>
+  contasAtivas.value.filter((c) =>
+    f.tipo === 'Despesa' ? true : f.tipo === 'Receita' ? c.tipo !== 'CartaoCredito' : c.tipo !== 'CartaoCredito' && c.tipo !== 'Beneficio'),
+)
+const destinos = computed(() => contasAtivas.value.filter((c) => c.id !== f.contaId && c.tipo !== 'Beneficio'))
 const iconeConta = (tipo: string) => TIPOS_CONTA.find((t) => t.value === tipo)?.icone ?? 'mdi-bank'
 
 const erros = computed(() => ({
@@ -92,7 +109,7 @@ function preencher() {
   const catMem = memoria('categoria.' + tipo)
   Object.assign(f, {
     tipo, valor: null, descricao: '', parcelas: 1, observacao: '', faturaMes: null, motivo: '', pago: true,
-    data: hojeIso(), contaDestinoId: null,
+    data: hojeIso(), contaDestinoId: null, complementoId: null,
     contaId: contasAtivas.value.some((c) => c.id === contaMem) ? contaMem : contasAtivas.value.find((c) => c.tipo !== 'CartaoCredito')?.id ?? null,
     categoriaId: estado.categorias.some((c) => c.id === catMem && c.ativa) ? catMem : null,
     formaPagamento: (memoria('forma.' + tipo) as FormaPagamento) ?? 'Pix',
@@ -109,7 +126,9 @@ watch(() => f.tipo, (tipo, antigo) => {
   f.categoriaId = estado.categorias.some((c) => c.id === cat && c.tipo === (tipo === 'Receita' ? 'Receita' : 'Despesa')) ? cat : null
   if (tipo !== 'Despesa' && ehCartao.value) f.contaId = contasAtivas.value.find((c) => c.tipo !== 'CartaoCredito')?.id ?? null
   if (tipo !== 'Despesa') f.parcelas = 1
+  if (tipo === 'Transferencia' && ehVale.value) f.contaId = contasAtivas.value.find((c) => c.tipo !== 'CartaoCredito' && c.tipo !== 'Beneficio')?.id ?? null
 })
+watch(() => f.contaId, () => { f.complementoId = null; if (ehVale.value) f.parcelas = 1 })
 
 watch(() => f.data, (d, antigo) => {
   // Mudou a data de uma compra no cartão: a fatura é recalculada pelo servidor.
@@ -158,7 +177,10 @@ async function salvar(outro = false) {
       await api.put(`/lancamentos/${editando.value.id}`, { ...corpo, motivo: f.motivo || null })
       alterado('Lançamento corrigido')
     } else {
-      await api.post('/lancamentos', { ...corpo, tipo: f.tipo, status, parcelas: f.tipo === 'Despesa' && f.parcelas > 1 ? f.parcelas : null })
+      await api.post('/lancamentos', {
+        ...corpo, tipo: f.tipo, status, parcelas: f.tipo === 'Despesa' && f.parcelas > 1 ? f.parcelas : null,
+        contaComplementoId: faltaNoVale.value > 0 ? f.complementoId : null,
+      })
       lembrar('conta.' + f.tipo, f.contaId)
       lembrar('categoria.' + f.tipo, f.categoriaId)
       lembrar('forma.' + f.tipo, f.formaPagamento)
@@ -256,6 +278,16 @@ const corTipo = computed(() => TIPOS.find((t) => t.valor === f.tipo)!.cor)
         <v-alert v-if="ehCartao" variant="tonal" density="compact" rounded="lg" icon="mdi-credit-card-outline" class="mt-2 text-body-2">
           Vai para a fatura do cartão, na categoria escolhida. Pagar a fatura depois não conta como gasto de novo.
         </v-alert>
+        <v-alert v-if="passaDoLimite !== null" type="warning" variant="tonal" density="compact" rounded="lg" class="mt-2 text-body-2" data-testid="aviso-limite">
+          Passa do limite disponível do cartão ({{ brl(passaDoLimite) }}).
+        </v-alert>
+        <v-alert v-if="faltaNoVale > 0" type="warning" variant="tonal" density="compact" rounded="lg" class="mt-2 text-body-2" data-testid="aviso-vale">
+          O {{ conta?.nome }} tem {{ brl(Math.max(0, conta?.saldo ?? 0)) }}. Completar os <b>{{ brl(faltaNoVale) }}</b> que faltam com:
+          <v-chip-group v-model="f.complementoId" column selected-class="text-primary" aria-label="Completar com">
+            <v-chip v-for="c in contasComplemento" :key="c.id" :value="c.id" filter variant="tonal" rounded="lg" size="small" :prepend-icon="iconeConta(c.tipo)">{{ c.nome }}</v-chip>
+          </v-chip-group>
+          <div class="text-caption">Sem escolher, a compra inteira fica no vale (o saldo dele fica negativo).</div>
+        </v-alert>
 
         <!-- Data -->
         <div class="rotulo mb-1 mt-4">Data</div>
@@ -269,7 +301,7 @@ const corTipo = computed(() => TIPOS.find((t) => t.valor === f.tipo)!.cor)
         <v-text-field v-if="outraData" v-model="f.data" type="date" label="Data" class="mt-2" style="max-width: 220px" />
 
         <!-- Parcelas -->
-        <template v-if="f.tipo === 'Despesa' && !editando">
+        <template v-if="f.tipo === 'Despesa' && !editando && !ehVale">
           <div class="rotulo mb-1 mt-4">Parcelas</div>
           <div class="d-flex align-center ga-3">
             <v-sheet rounded="lg" color="surface-variant" class="d-inline-flex align-center">

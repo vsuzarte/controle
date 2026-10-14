@@ -53,8 +53,61 @@ public class LancamentoService(AppDbContext db, IRelogio relogio, RegraService r
         l.Programado = l.Status == StatusLancamento.Previsto;
 
         db.Lancamentos.Add(l);
+        var criados = new List<Lancamento> { l };
+        if (dto.ContaComplementoId is { } complementoId && conta.EhBeneficio && l.Tipo == TipoLancamento.Despesa)
+            criados.AddRange(await Completar(l, conta, complementoId));
         await db.SaveChangesAsync();
-        return [l];
+        return criados;
+    }
+
+    /// <summary>
+    /// Compra maior que o saldo do vale: o vale paga o que tem e o resto vira um segundo lançamento
+    /// na outra conta (mesma descrição e categoria). Gravado junto, na mesma transação.
+    /// </summary>
+    private async Task<List<Lancamento>> Completar(Lancamento compra, Conta vale, Guid complementoId)
+    {
+        var outra = await ContaAtiva(complementoId);
+        if (outra.EhBeneficio || outra.Id == vale.Id)
+            throw new RegraNegocioException("Escolha outra conta (que não seja vale) para completar a compra.");
+
+        var saldo = Math.Max(0, await SaldoDaConta(vale, compra.Data));
+        if (compra.Valor <= saldo) return [];
+        var falta = compra.Valor - saldo;
+        if (saldo == 0)
+        {
+            // Vale zerado: a compra inteira vai para a outra conta.
+            compra.ContaId = outra.Id;
+            await AplicarContaCategoria(compra, outra, null, compra.CategoriaId, null);
+            return [];
+        }
+        compra.Valor = saldo;
+        var resto = new Lancamento
+        {
+            Tipo = compra.Tipo,
+            Status = outra.EhCartao && compra.Data <= Hoje ? StatusLancamento.Realizado : compra.Status,
+            Descricao = compra.Descricao,
+            Valor = falta,
+            Data = compra.Data,
+            ContaId = outra.Id,
+            FormaPagamento = compra.FormaPagamento,
+            Observacao = $"Complemento da compra no {vale.Nome}",
+            Programado = compra.Programado,
+        };
+        await AplicarContaCategoria(resto, outra, null, compra.CategoriaId, null);
+        db.Lancamentos.Add(resto);
+        return [resto];
+    }
+
+    private async Task<decimal> SaldoDaConta(Conta conta, DateOnly ate)
+    {
+        var movimentos = await db.Lancamentos
+            .Where(l => l.Status == StatusLancamento.Realizado && l.Data <= ate && (l.ContaId == conta.Id || l.ContaDestinoId == conta.Id))
+            .Select(l => new { l.Tipo, l.Valor, l.ContaId })
+            .ToListAsync();
+        return conta.SaldoInicial + movimentos.Sum(m =>
+            m.Tipo == TipoLancamento.Receita ? m.Valor
+            : m.Tipo == TipoLancamento.Despesa ? -m.Valor
+            : m.ContaId == conta.Id ? -m.Valor : m.Valor);
     }
 
     public async Task<Lancamento> Editar(Guid id, EditarLancamentoDto dto)
@@ -97,10 +150,13 @@ public class LancamentoService(AppDbContext db, IRelogio relogio, RegraService r
             var conta = await ContaAtiva(contaId);
             if (l.Tipo == TipoLancamento.Transferencia && conta.Id == l.ContaDestinoId)
                 throw new RegraNegocioException("Conta de origem e destino devem ser diferentes.");
+            if (conta.EhBeneficio && l.Tipo == TipoLancamento.Despesa && l.Programado)
+                throw new RegraNegocioException("Contas não podem ser pagas com o vale.");
             l.ContaId = conta.Id;
             l.FaturaMes = conta.EhCartao ? Calendario.FaturaDaCompra(conta, dto.Data) : null;
         }
         l.Valor = Validar.ValorPositivo(dto.Valor);
+        l.Juros = Validar.Juros(dto.Juros, l.Valor);
         l.Data = dto.Data;
         if (dto.FormaPagamento is not null) l.FormaPagamento = dto.FormaPagamento;
         l.Status = StatusLancamento.Realizado;
@@ -202,6 +258,8 @@ public class LancamentoService(AppDbContext db, IRelogio relogio, RegraService r
             if (contaDestinoId is null || contaDestinoId == conta.Id)
                 throw new RegraNegocioException("Informe uma conta de destino diferente da origem.");
             var destino = await db.Contas.FindAsync(contaDestinoId.Value) ?? throw new RegraNegocioException("Conta de destino não encontrada.");
+            if (conta.EhBeneficio || destino.EhBeneficio)
+                throw new RegraNegocioException("O saldo do vale não pode ser transferido; ele só é usado em compras.");
             l.ContaDestinoId = destino.Id;
             l.CategoriaId = null;
             l.FaturaMes = destino.EhCartao ? Calendario.InicioMes(faturaMes ?? Calendario.FaturaDaCompra(destino, l.Data)) : null;
@@ -236,6 +294,23 @@ internal static class Validar
         string.IsNullOrWhiteSpace(s) ? throw new RegraNegocioException($"Preencha o campo {campo}.") : s.Trim();
 
     public static string? Opcional(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
+    public static decimal? Limite(decimal? v)
+    {
+        if (v is null) return null;
+        var arredondado = decimal.Round(v.Value, 2, MidpointRounding.AwayFromZero);
+        return arredondado < 0 ? throw new RegraNegocioException("O limite não pode ser negativo.") : arredondado;
+    }
+
+    /// <summary>Juros/multa embutidos num pagamento: maior que zero e menor que o valor pago.</summary>
+    public static decimal? Juros(decimal? juros, decimal valorPago)
+    {
+        if (juros is null || juros == 0) return null;
+        var j = decimal.Round(juros.Value, 2, MidpointRounding.AwayFromZero);
+        if (j < 0) throw new RegraNegocioException("Os juros não podem ser negativos.");
+        if (j >= valorPago) throw new RegraNegocioException("Os juros devem ser menores que o valor pago.");
+        return j;
+    }
 
     public static decimal ValorPositivo(decimal v)
     {

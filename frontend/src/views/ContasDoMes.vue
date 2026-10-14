@@ -4,7 +4,7 @@ import { useDisplay } from 'vuetify'
 import { api } from '../api'
 import { alterado, contasAtivas, erro, estado, verHistorico } from '../estado'
 import { brl, dataBr, hojeIso } from '../formato'
-import { FORMAS, type FormaPagamento, type Frequencia, type Regra, type TipoLancamento } from '../tipos'
+import { FORMAS, VENCIMENTOS, type FormaPagamento, type Frequencia, type Regra, type RegraVencimento, type TipoLancamento } from '../tipos'
 import CampoValor from '../components/CampoValor.vue'
 
 const { smAndDown } = useDisplay()
@@ -46,8 +46,13 @@ const detalhe = (r: Regra) => {
   const freq = r.frequencia === 'Mensal' ? (r.intervalo > 1 ? `a cada ${r.intervalo} meses` : 'todo mês')
     : r.frequencia === 'Anual' ? (r.intervalo > 1 ? `a cada ${r.intervalo} anos` : 'todo ano')
       : r.intervalo > 1 ? `a cada ${r.intervalo} semanas` : 'toda semana'
-  return `${r.categoria} · ${r.conta} · ${freq}${r.valorVariavel ? ' · valor varia' : ''}`
+  return `${r.categoria} · ${r.conta} · ${quando(r) ?? freq}${r.valorVariavel ? ' · valor varia' : ''}${r.iniciaPeriodo ? ' · dia de pagamento' : ''}`
 }
+/** "5º dia útil", "último dia útil"... (só para regras mensais que não são dia fixo). */
+const quando = (r: Regra) =>
+  r.frequencia !== 'Mensal' || r.vencimento === 'DiaFixo' ? null
+    : r.vencimento === 'DiaUtil' ? `todo ${r.diaUtilNumero}º dia útil`
+      : r.vencimento === 'UltimoDiaUtil' ? 'todo último dia útil' : 'todo último dia do mês'
 
 // ---------- formulário ----------
 const dialogo = ref(false)
@@ -68,6 +73,10 @@ const f = reactive({
   observacao: '',
   aplicarAosPrevistos: true,
   motivo: '',
+  vencimento: 'DiaFixo' as RegraVencimento,
+  diaUtilNumero: 5 as number | null,
+  dia: null as number | null,
+  iniciaPeriodo: false,
 })
 
 const categorias = computed(() =>
@@ -76,8 +85,14 @@ const categorias = computed(() =>
     .map((c) => ({ title: c.nome, value: c.id, icone: c.icone, cor: c.cor })),
 )
 const contas = computed(() =>
-  contasAtivas.value.filter((c) => f.tipo === 'Despesa' || c.tipo !== 'CartaoCredito').map((c) => ({ title: c.nome, value: c.id })),
+  contasAtivas.value
+    .filter((c) => (f.tipo === 'Despesa' ? c.tipo !== 'Beneficio' : c.tipo !== 'CartaoCredito'))
+    .map((c) => ({ title: c.nome, value: c.id })),
 )
+const mensal = computed(() => f.frequencia === 'Mensal')
+const salarioCategoria = computed(() => estado.categorias.find((c) => c.id === f.categoriaId)?.nome.toLowerCase().startsWith('sal') ?? false)
+// Entrada na categoria Salário já nasce marcada como dia de pagamento.
+watch(() => f.categoriaId, () => { if (!editandoId.value && f.tipo === 'Receita') f.iniciaPeriodo = salarioCategoria.value })
 const regraEditada = computed(() => regras.value.find((r) => r.id === editandoId.value))
 const parcelado = computed(() => regraEditada.value?.modo === 'Parcelado')
 
@@ -88,6 +103,7 @@ function nova(tipo: TipoLancamento) {
     contaId: contasAtivas.value.find((c) => c.tipo !== 'CartaoCredito')?.id ?? null,
     formaPagamento: tipo === 'Receita' ? 'Transferencia' : 'Boleto', frequencia: 'Mensal', intervalo: 1,
     dataInicio: hojeIso(), dataFim: null, observacao: '', aplicarAosPrevistos: true, motivo: '',
+    vencimento: 'DiaFixo', diaUtilNumero: 5, dia: null, iniciaPeriodo: false,
   })
   dialogo.value = true
 }
@@ -98,6 +114,7 @@ function editar(r: Regra) {
     tipo: r.tipo, descricao: r.descricao, valor: r.valor, valorVariavel: r.valorVariavel, categoriaId: r.categoriaId,
     contaId: r.contaId, formaPagamento: r.formaPagamento, frequencia: r.frequencia, intervalo: r.intervalo,
     dataInicio: r.dataInicio, dataFim: r.dataFim, observacao: r.observacao ?? '', aplicarAosPrevistos: true, motivo: '',
+    vencimento: r.vencimento, diaUtilNumero: r.diaUtilNumero ?? 5, dia: Number(r.dataInicio.slice(8, 10)), iniciaPeriodo: r.iniciaPeriodo,
   })
   dialogo.value = true
 }
@@ -110,6 +127,10 @@ async function salvar() {
         descricao: f.descricao, categoriaId: f.categoriaId, contaId: f.contaId, formaPagamento: f.formaPagamento,
         valor: f.valor, valorVariavel: f.valorVariavel, dataFim: f.dataFim || null, observacao: f.observacao || null,
         aplicarAosPrevistos: f.aplicarAosPrevistos, motivo: f.motivo || null,
+        vencimento: parcelado.value || !mensal.value ? null : f.vencimento,
+        diaUtilNumero: f.vencimento === 'DiaUtil' ? f.diaUtilNumero : null,
+        dia: f.vencimento === 'DiaFixo' ? f.dia : null,
+        iniciaPeriodo: f.tipo === 'Receita' ? f.iniciaPeriodo : null,
       })
       alterado('Conta atualizada')
     } else {
@@ -117,6 +138,9 @@ async function salvar() {
         modo: 'Recorrente', tipo: f.tipo, descricao: f.descricao, categoriaId: f.categoriaId, contaId: f.contaId,
         formaPagamento: f.formaPagamento, valor: f.valor, valorVariavel: f.valorVariavel, parcelas: null,
         frequencia: f.frequencia, intervalo: f.intervalo, dataInicio: f.dataInicio, dataFim: f.dataFim || null, observacao: f.observacao || null,
+        vencimento: mensal.value ? f.vencimento : null,
+        diaUtilNumero: f.vencimento === 'DiaUtil' ? f.diaUtilNumero : null,
+        iniciaPeriodo: f.tipo === 'Receita' ? f.iniciaPeriodo : null,
       })
       alterado(f.tipo === 'Receita' ? 'Entrada cadastrada' : 'Conta cadastrada: os próximos vencimentos já aparecem')
     }
@@ -275,7 +299,6 @@ async function reativar(r: Regra) {
           </v-autocomplete>
           <v-select v-model="f.contaId" :items="contas" :label="f.tipo === 'Receita' ? 'Cai na conta' : 'Paga com'" />
           <template v-if="!editandoId">
-            <v-text-field v-model="f.dataInicio" type="date" label="Próximo vencimento" hint="O dia desta data vira o dia de vencimento." persistent-hint />
             <div class="d-flex ga-3">
               <v-select
                 v-model="f.frequencia"
@@ -284,6 +307,21 @@ async function reativar(r: Regra) {
               />
               <v-text-field v-model.number="f.intervalo" type="number" min="1" label="A cada" style="max-width: 110px" />
             </div>
+          </template>
+          <template v-if="!parcelado">
+            <v-select v-if="mensal" v-model="f.vencimento" :items="VENCIMENTOS" :label="f.tipo === 'Receita' ? 'Quando cai' : 'Quando vence'" data-testid="vencimento" />
+            <v-text-field v-if="mensal && f.vencimento === 'DiaUtil'" v-model.number="f.diaUtilNumero" type="number" min="1" max="23" label="Qual dia útil"
+              hint="Ex.: 5 para o 5º dia útil. Conta de segunda a sexta, sem feriados nacionais." persistent-hint />
+            <v-text-field v-if="!editandoId" v-model="f.dataInicio" type="date"
+              :label="!mensal || f.vencimento === 'DiaFixo' ? 'Próximo vencimento' : 'A partir de'"
+              :hint="!mensal || f.vencimento === 'DiaFixo' ? 'O dia desta data vira o dia de vencimento.' : 'A primeira data calculada a partir deste dia.'" persistent-hint />
+            <v-text-field v-else-if="mensal && f.vencimento === 'DiaFixo'" v-model.number="f.dia" type="number" min="1" max="31" label="Dia do vencimento" />
+            <v-alert v-if="editandoId && mensal && regraEditada && (f.vencimento !== regraEditada.vencimento || (f.vencimento === 'DiaUtil' && f.diaUtilNumero !== regraEditada.diaUtilNumero) || (f.vencimento === 'DiaFixo' && f.dia !== Number(regraEditada.dataInicio.slice(8, 10))))"
+              type="info" variant="tonal" density="compact" class="text-body-2">
+              As datas dos vencimentos ainda não pagos, a partir deste mês, serão recalculadas. O que já foi pago não muda.
+            </v-alert>
+            <v-switch v-if="f.tipo === 'Receita'" v-model="f.iniciaPeriodo" color="primary" inset hide-details density="compact"
+              label="É dia de pagamento (salário, adiantamento): divide a previsão em períodos" data-testid="inicia-periodo" />
           </template>
           <v-select
             v-if="!parcelado"
@@ -302,7 +340,7 @@ async function reativar(r: Regra) {
           </template>
         </v-card-text>
         <v-divider />
-        <v-card-actions class="pa-4">
+        <v-card-actions>
           <v-btn color="primary" variant="flat" size="large" block :loading="salvando" @click="salvar">Salvar</v-btn>
         </v-card-actions>
       </v-card>
@@ -327,7 +365,7 @@ async function reativar(r: Regra) {
           </v-alert>
           <v-text-field v-model="desat.motivo" label="Motivo (opcional)" />
         </v-card-text>
-        <v-card-actions class="pa-4">
+        <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="desativando = null">Voltar</v-btn>
           <v-btn color="error" variant="flat" @click="desativar">Confirmar</v-btn>

@@ -41,6 +41,7 @@ test.describe('cartão de crédito', () => {
     await expect(page.getByTestId('saldo-disponivel')).toHaveText(textoValor(2000))
 
     await irPara(page, 'Cartões')
+    await page.getByRole('tab', { name: 'Nubank' }).click()
     await expect(page.getByTestId('fatura-total')).toHaveText(textoValor(250))
     await page.getByText('dez/26').click()
     await expect(page.getByTestId('fatura-total')).toHaveText(textoValor(200))

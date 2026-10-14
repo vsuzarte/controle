@@ -73,18 +73,18 @@ Não exponha a porta diretamente na internet.
 
 ## Testes
 
-Rode sempre antes de subir uma mudança. Tudo roda em Docker, sem instalar nada:
+Rode antes de subir uma mudança. Tudo roda em Docker, sem instalar nada:
 
 ```powershell
-.\testar.ps1          # regras de negócio (.NET) + telas (Playwright)
-.\testar.ps1 -SoE2E   # só as telas
+.	estar.ps1        # unitários: regras de negócio (.NET) + lógica das telas (Vitest) + checagem de tipos
+.	estar.ps1 -E2E   # também os testes de tela (Playwright) — opcionais, mais demorados
 ```
 
-- **Regras de negócio** (`backend/tests`): duplicidade, auditoria, bloqueio de exclusão, cartão, estorno, previsão.
-- **Telas** (`e2e/testes`, Playwright): sobe uma cópia isolada do sistema (`docker-compose.e2e.yml`) com
-  **banco próprio, zerado antes de cada teste**, data fixa em 15/10/2026 e senha `e2e`. Roda no computador
-  e num celular simulado (Pixel 7). O banco de verdade nunca é tocado.
-- Falhou? O relatório com print, vídeo e passo a passo fica em `e2e/relatorio/index.html`.
+- **Backend** (`backend/tests`, xUnit): duplicidade, auditoria, bloqueio de exclusão, cartão e limite, estorno,
+  previsão por salário, dia útil, juros, vale, relatórios. Usa SQLite em memória com as migrations reais.
+- **Frontend** (`frontend/src/*.test.ts`, Vitest): a lógica das telas (vencimentos, juros, vale, limite, formatos).
+- **Telas** (`e2e/testes`, Playwright): fora da rotina. Sobem uma cópia isolada do sistema
+  (`docker-compose.e2e.yml`) com banco próprio, data fixa em 15/10/2026 e senha `e2e`. Podem estar desatualizados.
 
 Para **olhar o ambiente de testes** com dados de exemplo (http://localhost:8090, senha `e2e`):
 
@@ -93,8 +93,11 @@ docker compose -f docker-compose.e2e.yml up -d --build app
 node e2e/dados-exemplo.mjs
 ```
 
-Ao criar uma tela ou regra nova, crie o teste junto em `e2e/testes`, usando os atalhos de `apoio.ts`
-(`api.lancar`, `api.contaDoMes`, `digitarValor`, `escolher`, `salvar`…).
+## Atualizar sem perder dados
+
+Ao subir uma versão que muda a estrutura do banco, o app grava antes uma cópia completa em
+`backups/antes-da-atualizacao-<data>.db`; se a cópia falhar, ele não sobe (nada é alterado). As mudanças de
+estrutura só acrescentam colunas — nada é removido nem renomeado.
 
 ## Desenvolvimento
 

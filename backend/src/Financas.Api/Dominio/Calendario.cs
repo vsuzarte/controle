@@ -44,8 +44,58 @@ public static class Calendario
         {
             Frequencia.Semanal => r.DataInicio.AddDays(7 * passo),
             Frequencia.Anual => r.DataInicio.AddYears(passo),
-            _ => r.DataInicio.AddMonths(passo),
+            _ when r.Vencimento is null or RegraVencimento.DiaFixo => r.DataInicio.AddMonths(passo),
+            _ => DataNoMes(InicioMes(r.DataInicio).AddMonths(passo), r.Vencimento.Value, r.DiaUtilNumero),
         };
+    }
+
+    /// <summary>Data do vencimento dentro do mês, para as regras "N-ésimo dia útil", "último dia" e "último dia útil".</summary>
+    public static DateOnly DataNoMes(DateOnly mes, RegraVencimento regra, int? diaUtil)
+    {
+        var inicio = InicioMes(mes);
+        var fim = FimMes(mes);
+        switch (regra)
+        {
+            case RegraVencimento.UltimoDia:
+                return fim;
+            case RegraVencimento.UltimoDiaUtil:
+                var d = fim;
+                while (!DiaUtil(d)) d = d.AddDays(-1);
+                return d;
+            case RegraVencimento.DiaUtil:
+                var n = Math.Clamp(diaUtil ?? 1, 1, 23);
+                var data = inicio.AddDays(-1);
+                for (var contados = 0; contados < n;)
+                {
+                    data = data.AddDays(1);
+                    if (DiaUtil(data)) contados++;
+                }
+                return data;
+            default:
+                return inicio;
+        }
+    }
+
+    /// <summary>Segunda a sexta, fora os feriados nacionais (dias em que os bancos não abrem).</summary>
+    public static bool DiaUtil(DateOnly d) =>
+        d.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday) && !Feriado(d);
+
+    public static bool Feriado(DateOnly d)
+    {
+        if ((d.Month, d.Day) is (1, 1) or (4, 21) or (5, 1) or (9, 7) or (10, 12) or (11, 2) or (11, 15) or (11, 20) or (12, 25))
+            return true;
+        var pascoa = Pascoa(d.Year);
+        // Móveis: Carnaval (segunda e terça), Sexta-feira Santa e Corpus Christi.
+        return d == pascoa.AddDays(-48) || d == pascoa.AddDays(-47) || d == pascoa.AddDays(-2) || d == pascoa.AddDays(60);
+    }
+
+    /// <summary>Domingo de Páscoa (algoritmo de Meeus/Jones/Butcher).</summary>
+    public static DateOnly Pascoa(int ano)
+    {
+        int a = ano % 19, b = ano / 100, c = ano % 100, d = b / 4, e = b % 4, f = (b + 8) / 25, g = (b - f + 1) / 3;
+        int h = (19 * a + b - d - g + 15) % 30, i = c / 4, k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+        int m = (a + 11 * h + 22 * l) / 451, mes = (h + l - 7 * m + 114) / 31, dia = (h + l - 7 * m + 114) % 31 + 1;
+        return new DateOnly(ano, mes, dia);
     }
 
     // ---------- Cartão de crédito ----------

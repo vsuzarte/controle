@@ -2,7 +2,9 @@ using Financas.Api.Dominio;
 
 namespace Financas.Api.Servicos;
 
-public record ContaDto(string Nome, TipoConta Tipo, decimal SaldoInicial, string? Cor, int? DiaFechamento, int? DiaVencimento, bool Ativa = true);
+public record ContaDto(string Nome, TipoConta Tipo, decimal SaldoInicial, string? Cor, int? DiaFechamento, int? DiaVencimento, bool Ativa = true, decimal? Limite = null);
+
+public record LimiteDto(decimal? Limite, string? Motivo);
 
 public record CategoriaDto(string Nome, TipoCategoria Tipo, string? Grupo, string? Cor, string? Icone, bool Ativa = true);
 
@@ -18,7 +20,9 @@ public record NovoLancamentoDto(
     string? Observacao,
     StatusLancamento? Status,
     int? Parcelas,
-    DateOnly? FaturaMes);
+    DateOnly? FaturaMes,
+    /// <summary>Compra no vale maior que o saldo: o que faltar sai desta conta (vira um segundo lançamento).</summary>
+    Guid? ContaComplementoId = null);
 
 public record EditarLancamentoDto(
     string Descricao,
@@ -32,7 +36,8 @@ public record EditarLancamentoDto(
     DateOnly? FaturaMes,
     string? Motivo);
 
-public record ConfirmarDto(DateOnly Data, decimal Valor, Guid? ContaId, FormaPagamento? FormaPagamento);
+/// <summary>Juros: quanto do valor pago foi juros/multa por atraso.</summary>
+public record ConfirmarDto(DateOnly Data, decimal Valor, Guid? ContaId, FormaPagamento? FormaPagamento, decimal? Juros = null);
 public record MotivoDto(string? Motivo);
 public record EstornoDto(decimal Valor, DateOnly Data, string? Motivo);
 
@@ -50,7 +55,10 @@ public record RegraDto(
     int Intervalo,
     DateOnly DataInicio,
     DateOnly? DataFim,
-    string? Observacao);
+    string? Observacao,
+    RegraVencimento? Vencimento = null,
+    int? DiaUtilNumero = null,
+    bool? IniciaPeriodo = null);
 
 public record EditarRegraDto(
     string Descricao,
@@ -62,11 +70,18 @@ public record EditarRegraDto(
     DateOnly? DataFim,
     string? Observacao,
     bool AplicarAosPrevistos,
-    string? Motivo);
+    string? Motivo,
+    /// <summary>Mensal: nova forma de vencimento. Nulo = não muda. Ao mudar, os previstos a partir deste mês são recalculados.</summary>
+    RegraVencimento? Vencimento = null,
+    int? DiaUtilNumero = null,
+    /// <summary>Com Vencimento = DiaFixo: novo dia do mês.</summary>
+    int? Dia = null,
+    bool? IniciaPeriodo = null);
 
 public record DesativarRegraDto(bool CancelarPrevistos, string? Motivo);
 
-public record PagarFaturaDto(Guid ContaOrigemId, decimal Valor, DateOnly Data);
+/// <summary>Juros: parte do valor que foi juros/multa (vira uma despesa separada em "Tarifas e juros").</summary>
+public record PagarFaturaDto(Guid ContaOrigemId, decimal Valor, DateOnly Data, decimal? Juros = null);
 
 public record ValorOrcamentoDto(decimal Valor, string? Motivo);
 
@@ -95,7 +110,10 @@ public record LancamentoView(
     Guid? EstornoDeId,
     string? MotivoCancelamento,
     DateTime CriadoEm,
-    DateTime AtualizadoEm)
+    DateTime AtualizadoEm,
+    decimal? Juros,
+    /// <summary>Veio de uma conta do mês com valor que muda (luz, água): pagar mais não é juros.</summary>
+    bool ValorVariavel)
 {
     public static LancamentoView De(Lancamento l) => new(
         l.Id, l.Tipo, l.Status, l.Descricao, l.Valor, l.Data,
@@ -103,5 +121,5 @@ public record LancamentoView(
         l.CategoriaId, l.Categoria?.Nome, l.Categoria?.Cor, l.Categoria?.Icone,
         l.FormaPagamento, l.Observacao, l.Programado, l.RegraId, l.Sequencia,
         l.Regra?.Modo == ModoRegra.Parcelado ? l.Regra.Parcelas : null,
-        l.FaturaMes, l.EstornoDeId, l.MotivoCancelamento, l.CriadoEm, l.AtualizadoEm);
+        l.FaturaMes, l.EstornoDeId, l.MotivoCancelamento, l.CriadoEm, l.AtualizadoEm, l.Juros, l.Regra?.ValorVariavel ?? false);
 }

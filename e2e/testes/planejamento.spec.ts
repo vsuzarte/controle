@@ -44,7 +44,6 @@ test.describe('planejamento', () => {
     await expect(mercado).toContainText('ajustado')
     await expect(mercado).toContainText('650,00')
 
-    await irPara(page, 'Início')
     await expect(page.getByTestId('sobra-prevista')).toHaveText(textoValor(-650))
   })
 })

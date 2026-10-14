@@ -306,6 +306,24 @@ public class CartaoTests
     }
 
     [Fact]
+    public async Task Limite_usado_conta_parcelas_futuras_e_libera_com_pagamento_e_estorno()
+    {
+        using var a = new Ambiente();
+        await a.Despesa(1200m, D(2026, 10, 5), a.Lazer, a.Cartao, parcelas: 6);   // ocupa os 1.200 na hora
+        var mercado = await a.Despesa(300m, D(2026, 10, 6), a.Mercado, a.Cartao);
+        await a.Recorrente(TipoLancamento.Despesa, a.Lazer, 55.90m, D(2026, 10, 20), a.Cartao); // futura: não ocupa
+        var cancelada = await a.Despesa(999m, D(2026, 10, 7), a.Mercado, a.Cartao);
+        await a.Lancamentos.Cancelar(cancelada.Id, "erro");
+
+        Assert.Equal(1500m, (await a.Cartoes.LimitesUsados())[a.Cartao.Id]);
+
+        await a.Lancamentos.Estornar(mercado.Id, new EstornoDto(100m, D(2026, 10, 8), "devolução"));
+        await a.Cartoes.Pagar(a.Cartao.Id, D(2026, 11, 1), new PagarFaturaDto(a.Banco.Id, 400m, D(2026, 10, 15)));
+
+        Assert.Equal(1000m, (await a.Cartoes.LimitesUsados())[a.Cartao.Id]);
+    }
+
+    [Fact]
     public async Task Recorrencia_no_cartao_e_confirmada_automaticamente_na_data()
     {
         using var a = new Ambiente();

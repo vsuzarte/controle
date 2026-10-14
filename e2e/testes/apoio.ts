@@ -34,9 +34,17 @@ export class Api {
     return c!.id
   }
 
-  async criarCartao(nome = 'Nubank', fechamento = 3, vencimento = 10): Promise<string> {
+  async criarCartao(nome = 'Nubank', fechamento = 3, vencimento = 10, limite: number | null = null): Promise<string> {
     const c = await this.json<{ id: string }>(
-      await this.r.post('/api/contas', { data: { nome, tipo: 'CartaoCredito', saldoInicial: 0, diaFechamento: fechamento, diaVencimento: vencimento, ativa: true } }),
+      await this.r.post('/api/contas', { data: { nome, tipo: 'CartaoCredito', saldoInicial: 0, diaFechamento: fechamento, diaVencimento: vencimento, ativa: true, limite } }),
+    )
+    return c.id
+  }
+
+  /** Vale-refeição/alimentação com saldo. */
+  async criarVale(nome = 'VR', saldo = 0): Promise<string> {
+    const c = await this.json<{ id: string }>(
+      await this.r.post('/api/contas', { data: { nome, tipo: 'Beneficio', saldoInicial: saldo, ativa: true } }),
     )
     return c.id
   }
@@ -73,7 +81,11 @@ export class Api {
     )
   }
 
-  async contaDoMes(d: { descricao: string; valor: number; categoria: string; inicio: string; tipo?: 'Despesa' | 'Receita'; conta?: string; variavel?: boolean }) {
+  async contaDoMes(d: {
+    descricao: string; valor: number; categoria: string; inicio: string; tipo?: 'Despesa' | 'Receita'; conta?: string; variavel?: boolean
+    /** Ex.: 5 = quinto dia útil. */
+    diaUtil?: number
+  }) {
     return this.json<string>(
       await this.r.post('/api/regras', {
         data: {
@@ -88,6 +100,8 @@ export class Api {
           frequencia: 'Mensal',
           intervalo: 1,
           dataInicio: d.inicio,
+          vencimento: d.diaUtil ? 'DiaUtil' : null,
+          diaUtilNumero: d.diaUtil ?? null,
         },
       }),
     )

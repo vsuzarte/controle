@@ -19,13 +19,13 @@ const ICONES = [
 // ---------- contas ----------
 const contaDlg = ref(false)
 const contaEdit = ref<Conta | null>(null)
-const c = reactive({ nome: '', tipo: 'Corrente' as TipoConta, saldoInicial: 0 as number | null, cor: PALETA[0] as string | null, diaFechamento: null as number | null, diaVencimento: null as number | null, ativa: true })
+const c = reactive({ nome: '', tipo: 'Corrente' as TipoConta, saldoInicial: 0 as number | null, cor: PALETA[0] as string | null, diaFechamento: null as number | null, diaVencimento: null as number | null, limite: null as number | null, ativa: true })
 
 function abrirConta(conta?: Conta) {
   contaEdit.value = conta ?? null
   Object.assign(c, conta
-    ? { nome: conta.nome, tipo: conta.tipo, saldoInicial: conta.saldoInicial, cor: conta.cor, diaFechamento: conta.diaFechamento, diaVencimento: conta.diaVencimento, ativa: conta.ativa }
-    : { nome: '', tipo: 'Corrente', saldoInicial: 0, cor: PALETA[0], diaFechamento: null, diaVencimento: null, ativa: true })
+    ? { nome: conta.nome, tipo: conta.tipo, saldoInicial: conta.saldoInicial, cor: conta.cor, diaFechamento: conta.diaFechamento, diaVencimento: conta.diaVencimento, limite: conta.limite, ativa: conta.ativa }
+    : { nome: '', tipo: 'Corrente', saldoInicial: 0, cor: PALETA[0], diaFechamento: null, diaVencimento: null, limite: null, ativa: true })
   contaDlg.value = true
 }
 
@@ -100,7 +100,7 @@ const iconeConta = (t: TipoConta) => TIPOS_CONTA.find((x) => x.value === t)?.ico
               <v-list-item-title>{{ x.nome }} <v-chip v-if="!x.ativa" size="x-small">inativa</v-chip></v-list-item-title>
               <v-list-item-subtitle>
                 {{ TIPOS_CONTA.find((t) => t.value === x.tipo)?.title }}
-                <template v-if="x.tipo === 'CartaoCredito'"> · fecha dia {{ x.diaFechamento }}, vence dia {{ x.diaVencimento }}</template>
+                <template v-if="x.tipo === 'CartaoCredito'"> · fecha dia {{ x.diaFechamento }}, vence dia {{ x.diaVencimento }}<template v-if="x.limite"> · limite {{ brl(x.limite) }}</template></template>
               </v-list-item-subtitle>
               <template #append>
                 <span class="valor" :class="x.saldo < 0 ? 'text-error' : ''">{{ brl(x.saldo) }}</span>
@@ -166,10 +166,16 @@ const iconeConta = (t: TipoConta) => TIPOS_CONTA.find((x) => x.value === t)?.ico
               <v-text-field v-model.number="c.diaVencimento" type="number" min="1" max="31" label="Dia do vencimento" />
             </div>
             <div class="text-caption text-medium-emphasis">Compras a partir do dia do fechamento entram na fatura seguinte.</div>
+            <CampoValor v-model="c.limite" label="Limite (opcional)" livre />
+            <div class="text-caption text-medium-emphasis mt-n2">Mudou o limite no banco? Ajuste aqui ou em Cartões → Ajustar limite.</div>
           </template>
           <template v-else>
-            <CampoValor v-model="c.saldoInicial" label="Saldo atual (ponto de partida)" livre />
-            <div class="text-caption text-medium-emphasis mt-n2">Coloque o saldo de hoje no banco; daqui pra frente o sistema calcula.</div>
+            <CampoValor v-model="c.saldoInicial" :label="c.tipo === 'Beneficio' ? 'Saldo atual do vale' : 'Saldo atual (ponto de partida)'" livre />
+            <div v-if="c.tipo === 'Beneficio'" class="text-caption text-medium-emphasis mt-n2">
+              O vale só serve para compras (mercado, restaurante...): não paga contas nem faturas e não entra no saldo disponível.
+              Cadastre a recarga mensal em Contas do mês como uma entrada nesta conta.
+            </div>
+            <div v-else class="text-caption text-medium-emphasis mt-n2">Coloque o saldo de hoje no banco; daqui pra frente o sistema calcula.</div>
           </template>
           <div>
             <div class="text-caption mb-1">Cor</div>
@@ -181,7 +187,7 @@ const iconeConta = (t: TipoConta) => TIPOS_CONTA.find((x) => x.value === t)?.ico
           </div>
           <v-switch v-if="contaEdit" v-model="c.ativa" label="Ativa" color="primary" hide-details density="compact" />
         </v-card-text>
-        <v-card-actions class="pa-3"><v-spacer /><v-btn variant="text" @click="contaDlg = false">Voltar</v-btn><v-btn color="primary" variant="flat" @click="salvarConta">Salvar</v-btn></v-card-actions>
+        <v-card-actions><v-spacer /><v-btn variant="text" @click="contaDlg = false">Voltar</v-btn><v-btn color="primary" variant="flat" @click="salvarConta">Salvar</v-btn></v-card-actions>
       </v-card>
     </v-dialog>
 
@@ -211,7 +217,7 @@ const iconeConta = (t: TipoConta) => TIPOS_CONTA.find((x) => x.value === t)?.ico
           </div>
           <v-switch v-if="catEdit" v-model="k.ativa" label="Ativa (inativas somem dos formulários, mas o histórico fica)" color="primary" hide-details density="compact" />
         </v-card-text>
-        <v-card-actions class="pa-3"><v-spacer /><v-btn variant="text" @click="catDlg = false">Voltar</v-btn><v-btn color="primary" variant="flat" @click="salvarCategoria">Salvar</v-btn></v-card-actions>
+        <v-card-actions><v-spacer /><v-btn variant="text" @click="catDlg = false">Voltar</v-btn><v-btn color="primary" variant="flat" @click="salvarCategoria">Salvar</v-btn></v-card-actions>
       </v-card>
     </v-dialog>
   </div>

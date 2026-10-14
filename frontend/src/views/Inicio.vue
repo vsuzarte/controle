@@ -2,14 +2,16 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../api'
-import { confirmarLancamento, erro, estado, novoLancamento } from '../estado'
-import { brl, dataBr, nomeMes } from '../formato'
+import { confirmarLancamento, erro, estado, novoLancamento, pagarFatura } from '../estado'
+import { brl, dataBr, nomeMes, somarDias } from '../formato'
 import type { Alerta, Lancamento, Resumo } from '../tipos'
+import { separarVencimentos } from '../regras'
 import Rosca from '../components/Rosca.vue'
 
 const router = useRouter()
 const r = ref<Resumo | null>(null)
 const verContas = ref(false)
+const verResto = ref(false)
 
 async function carregar() {
   try {
@@ -31,21 +33,34 @@ const acoes = [
   { titulo: 'Despesa', icone: 'mdi-arrow-down', cor: 'error', fazer: () => novoLancamento('Despesa') },
   { titulo: 'Receita', icone: 'mdi-arrow-up', cor: 'success', fazer: () => novoLancamento('Receita') },
   { titulo: 'Transferir', icone: 'mdi-swap-horizontal', cor: 'secondary', fazer: () => novoLancamento('Transferencia') },
-  { titulo: 'Contas', icone: 'mdi-calendar-blank', cor: 'info', fazer: () => router.push('/contas-do-mes') },
+  { titulo: 'Previsão', icone: 'mdi-calendar-clock', cor: 'info', fazer: () => router.push('/previsao') },
 ]
 
+// ----- Previsão: período de hoje e "livre até o próximo pagamento" -----
+const previsao = computed(() => r.value?.previsao)
+const periodoAtual = computed(() => previsao.value?.periodos.find((p) => p.atual) ?? previsao.value?.periodos[0])
+const proximoPagamento = computed(() => (periodoAtual.value ? somarDias(periodoAtual.value.fim, 1) : null))
+
+// ----- Vencimentos até o próximo salário -----
 const corAlerta = (a: Alerta) => (a.tipo === 'Vencido' ? 'error' : a.tipo === 'Hoje' ? 'warning' : 'info')
 const textoAlerta = (a: Alerta) =>
   a.tipo === 'Vencido'
     ? `venceu há ${a.dias} dia${a.dias > 1 ? 's' : ''}`
-    : a.tipo === 'Hoje'
-      ? 'vence hoje'
-      : `em ${a.dias} dia${a.dias > 1 ? 's' : ''}`
+    : a.tipo === 'Hoje' ? 'vence hoje' : `${dataBr(a.data)} · em ${a.dias} dia${a.dias > 1 ? 's' : ''}`
 const iconeAlerta = (a: Alerta) => (a.cartaoId ? 'mdi-credit-card-outline' : a.tipoLancamento === 'Receita' ? 'mdi-cash-plus' : 'mdi-receipt-text-outline')
 
+const vencimentos = computed(() => separarVencimentos(r.value?.alertas ?? []))
+const aPagar = computed(() => vencimentos.value.aPagar)
+const aReceber = computed(() => vencimentos.value.aReceber)
+const atrasadas = computed(() => vencimentos.value.atrasadas)
+const semana = computed(() => vencimentos.value.semana)
+const resto = computed(() => vencimentos.value.depois)
+const totalAPagar = computed(() => vencimentos.value.total)
+
 async function agirAlerta(a: Alerta) {
-  if (a.cartaoId) {
-    router.push({ path: '/cartoes', query: { cartao: a.cartaoId, mes: a.faturaMes?.slice(0, 7) } })
+  if (a.cartaoId && a.faturaMes) {
+    const cartao = estado.contas.find((c) => c.id === a.cartaoId)?.nome ?? ''
+    pagarFatura({ cartaoId: a.cartaoId, cartao, mes: a.faturaMes, vencimento: a.data, restante: a.valor })
     return
   }
   try {
@@ -54,18 +69,6 @@ async function agirAlerta(a: Alerta) {
     erro(e)
   }
 }
-
-/** Para onde vão as receitas do mês: fixas, dia a dia e o que sobra. */
-const previsao = computed(() => {
-  const p = r.value?.planejamento
-  if (!p) return []
-  const base = Math.max(p.totalReceitas, p.totalCompromissos + p.totalVariaveis, 1)
-  return [
-    { nome: 'Contas fixas e parcelas', valor: p.totalCompromissos, cor: 'secondary' },
-    { nome: 'Gastos do dia a dia', valor: p.totalVariaveis, cor: 'warning' },
-    { nome: 'Sobra', valor: Math.max(0, p.resultadoPrevisto), cor: 'success' },
-  ].map((x) => ({ ...x, pct: (x.valor / base) * 100 }))
-})
 </script>
 
 <template>
@@ -103,8 +106,11 @@ const previsao = computed(() => {
         <v-divider class="my-4" color="white" style="opacity: 0.25" />
         <v-row dense>
           <v-col cols="12" sm="4">
-            <div class="rotulo" style="opacity: 0.8">Previsto no fim do mês</div>
-            <div class="medio" data-testid="saldo-projetado">{{ brl(r.saldoProjetado) }}</div>
+            <div class="rotulo" style="opacity: 0.8">
+              {{ previsao?.porSalario && proximoPagamento ? `Livre até ${dataBr(somarDias(proximoPagamento, -1))}` : 'Previsto no fim do mês' }}
+            </div>
+            <div class="medio" data-testid="saldo-projetado">{{ brl(periodoAtual?.saldoFim ?? r.saldoProjetado) }}</div>
+            <div v-if="periodoAtual?.porDia" class="text-caption" style="opacity: 0.8">≈ {{ brl(periodoAtual.porDia) }} por dia</div>
           </v-col>
           <v-col cols="6" sm="4">
             <div class="rotulo" style="opacity: 0.8">Entrou no mês</div>
@@ -117,6 +123,23 @@ const previsao = computed(() => {
         </v-row>
       </v-card>
 
+      <!-- ===== Vales ===== -->
+      <v-row v-if="r.beneficios.length" dense class="mb-3">
+        <v-col v-for="b in r.beneficios" :key="b.id" cols="12" sm="6">
+          <v-card class="pa-4 d-flex align-center ga-3" data-testid="vale" :aria-label="b.nome">
+            <v-avatar :color="b.cor ?? 'warning'" variant="tonal" rounded="lg"><v-icon>mdi-food</v-icon></v-avatar>
+            <div class="flex-grow-1">
+              <div class="rotulo">{{ b.nome }}</div>
+              <div class="medio" :class="b.saldo < 0 ? 'text-error' : ''" data-testid="vale-saldo">{{ brl(b.saldo) }}</div>
+              <div class="text-caption text-medium-emphasis">
+                <template v-if="b.proximaRecarga">Recarga {{ dataBr(b.proximaRecarga) }}<template v-if="b.valorRecarga"> ({{ brl(b.valorRecarga) }})</template></template>
+                <template v-if="b.duraAte"> · no ritmo atual dura até {{ dataBr(b.duraAte) }}</template>
+              </div>
+            </div>
+          </v-card>
+        </v-col>
+      </v-row>
+
       <!-- ===== Ações rápidas ===== -->
       <v-row dense class="mb-3">
         <v-col v-for="a in acoes" :key="a.titulo" cols="3">
@@ -128,68 +151,137 @@ const previsao = computed(() => {
       </v-row>
 
       <v-row>
-        <!-- ===== Vencimentos ===== -->
+        <!-- ===== A pagar até o próximo salário ===== -->
         <v-col cols="12" md="6">
           <v-card class="h-100" data-testid="card-vencimentos">
             <v-card-item>
-              <v-card-title class="font-weight-bold">Vencimentos</v-card-title>
+              <v-card-title class="font-weight-bold">A pagar</v-card-title>
+              <v-card-subtitle v-if="previsao">até {{ dataBr(previsao.fim) }} · {{ brl(totalAPagar) }}</v-card-subtitle>
               <template #append>
-                <v-chip v-if="r.alertas.some((a) => a.tipo === 'Vencido')" color="error" variant="tonal" size="small" label>
-                  {{ r.alertas.filter((a) => a.tipo === 'Vencido').length }} atrasado(s)
+                <v-chip v-if="atrasadas.length" color="error" variant="tonal" size="small" label>
+                  {{ atrasadas.reduce((s, g) => s + g.itens.length, 0) }} atrasado(s)
                 </v-chip>
               </template>
             </v-card-item>
-            <v-list v-if="r.alertas.length" class="pt-0">
-              <v-list-item v-for="(a, i) in r.alertas" :key="i" data-testid="alerta" :aria-label="a.descricao">
-                <template #prepend>
-                  <v-avatar :color="corAlerta(a)" variant="tonal" rounded="lg"><v-icon>{{ iconeAlerta(a) }}</v-icon></v-avatar>
+
+            <v-list v-if="aPagar.length" class="pt-0">
+              <template v-if="atrasadas.length">
+                <v-list-subheader class="text-error font-weight-bold">Atrasadas</v-list-subheader>
+                <template v-for="g in atrasadas" :key="g.chave">
+                  <v-list-group v-if="g.itens.length > 1" :value="g.chave">
+                    <template #activator="{ props }">
+                      <v-list-item v-bind="props" data-testid="alerta-grupo" :aria-label="g.itens[0].descricao">
+                        <template #prepend><v-avatar color="error" variant="tonal" rounded="lg"><v-icon>{{ iconeAlerta(g.itens[0]) }}</v-icon></v-avatar></template>
+                        <v-list-item-title class="font-weight-medium">{{ g.itens[0].descricao }}</v-list-item-title>
+                        <v-list-item-subtitle class="text-error" style="opacity: 1">{{ g.itens.length }} meses sem pagar · {{ brl(g.total) }}</v-list-item-subtitle>
+                      </v-list-item>
+                    </template>
+                    <v-list-item v-for="a in g.itens" :key="a.lancamentoId ?? a.data" data-testid="alerta" :aria-label="a.descricao">
+                      <v-list-item-subtitle class="text-error" style="opacity: 1">{{ dataBr(a.data) }} · {{ textoAlerta(a) }}</v-list-item-subtitle>
+                      <template #append>
+                        <div class="d-flex align-center ga-3">
+                          <span class="valor">{{ brl(a.valor) }}</span>
+                          <v-btn size="small" variant="flat" color="primary" @click="agirAlerta(a)">{{ a.cartaoId ? 'Pagar' : 'Paguei' }}</v-btn>
+                        </div>
+                      </template>
+                    </v-list-item>
+                  </v-list-group>
+                  <v-list-item v-else data-testid="alerta" :aria-label="g.itens[0].descricao">
+                    <template #prepend><v-avatar color="error" variant="tonal" rounded="lg"><v-icon>{{ iconeAlerta(g.itens[0]) }}</v-icon></v-avatar></template>
+                    <v-list-item-title class="font-weight-medium">{{ g.itens[0].descricao }}</v-list-item-title>
+                    <v-list-item-subtitle class="text-error" style="opacity: 1">{{ textoAlerta(g.itens[0]) }}</v-list-item-subtitle>
+                    <template #append>
+                      <div class="d-flex align-center ga-3">
+                        <span class="valor">{{ brl(g.itens[0].valor) }}</span>
+                        <v-btn size="small" variant="flat" color="primary" @click="agirAlerta(g.itens[0])">{{ g.itens[0].cartaoId ? 'Pagar' : 'Paguei' }}</v-btn>
+                      </div>
+                    </template>
+                  </v-list-item>
                 </template>
-                <v-list-item-title class="font-weight-medium">{{ a.descricao }}</v-list-item-title>
-                <v-list-item-subtitle :class="'text-' + corAlerta(a)" style="opacity: 1">{{ textoAlerta(a) }}</v-list-item-subtitle>
-                <template #append>
-                  <div class="d-flex align-center ga-3">
-                    <span class="valor">{{ brl(a.valor) }}</span>
-                    <v-btn size="small" variant="flat" :color="a.tipoLancamento === 'Receita' ? 'success' : 'primary'" @click="agirAlerta(a)">
-                      {{ a.cartaoId ? 'Ver fatura' : a.tipoLancamento === 'Receita' ? 'Recebi' : 'Paguei' }}
+              </template>
+
+              <template v-for="bloco in [{ titulo: 'Próximos 7 dias', itens: semana, mostrar: true }, { titulo: 'Depois', itens: resto, mostrar: verResto }]" :key="bloco.titulo">
+                <template v-if="bloco.itens.length">
+                  <v-list-subheader class="font-weight-bold">
+                    {{ bloco.titulo }}
+                    <v-btn v-if="bloco.titulo === 'Depois'" size="x-small" variant="text" class="ml-1" @click="verResto = !verResto">
+                      {{ verResto ? 'ocultar' : `ver ${bloco.itens.length} · ${brl(bloco.itens.reduce((s, a) => s + a.valor, 0))}` }}
                     </v-btn>
-                  </div>
+                  </v-list-subheader>
+                  <template v-if="bloco.mostrar">
+                    <v-list-item v-for="(a, i) in bloco.itens" :key="i" data-testid="alerta" :aria-label="a.descricao">
+                      <template #prepend><v-avatar :color="corAlerta(a)" variant="tonal" rounded="lg"><v-icon>{{ iconeAlerta(a) }}</v-icon></v-avatar></template>
+                      <v-list-item-title class="font-weight-medium">{{ a.descricao }}</v-list-item-title>
+                      <v-list-item-subtitle :class="'text-' + corAlerta(a)" style="opacity: 1">{{ textoAlerta(a) }}</v-list-item-subtitle>
+                      <template #append>
+                        <div class="d-flex align-center ga-3">
+                          <span class="valor">{{ brl(a.valor) }}</span>
+                          <v-btn size="small" variant="flat" color="primary" @click="agirAlerta(a)">{{ a.cartaoId ? 'Pagar' : 'Paguei' }}</v-btn>
+                        </div>
+                      </template>
+                    </v-list-item>
+                  </template>
                 </template>
-              </v-list-item>
+              </template>
             </v-list>
             <v-card-text v-else class="d-flex align-center ga-3">
               <v-avatar color="success" variant="tonal" rounded="lg"><v-icon>mdi-check-all</v-icon></v-avatar>
-              <span class="text-medium-emphasis">Tudo em dia. Nada vence nos próximos 7 dias.</span>
+              <span class="text-medium-emphasis">Tudo em dia até o próximo pagamento.</span>
             </v-card-text>
+
+            <template v-if="aReceber.length">
+              <v-divider />
+              <v-list density="compact">
+                <v-list-subheader class="font-weight-bold">A receber</v-list-subheader>
+                <v-list-item v-for="(a, i) in aReceber" :key="i" data-testid="alerta" :aria-label="a.descricao">
+                  <template #prepend><v-icon color="success">mdi-cash-plus</v-icon></template>
+                  <v-list-item-title>{{ a.descricao }}</v-list-item-title>
+                  <v-list-item-subtitle>{{ textoAlerta(a) }}</v-list-item-subtitle>
+                  <template #append>
+                    <div class="d-flex align-center ga-3">
+                      <span class="valor text-success">{{ brl(a.valor) }}</span>
+                      <v-btn size="small" variant="tonal" color="success" @click="agirAlerta(a)">Recebi</v-btn>
+                    </div>
+                  </template>
+                </v-list-item>
+              </v-list>
+            </template>
           </v-card>
         </v-col>
 
-        <!-- ===== Previsão ===== -->
+        <!-- ===== Previsão por período ===== -->
         <v-col cols="12" md="6">
-          <v-card class="h-100" data-testid="card-previsao">
+          <v-card v-if="previsao" class="h-100" data-testid="card-previsao">
             <v-card-item>
-              <v-card-title class="font-weight-bold">Previsão do mês</v-card-title>
+              <v-card-title class="font-weight-bold">Previsão</v-card-title>
+              <v-card-subtitle>{{ dataBr(previsao.inicio) }} a {{ dataBr(previsao.fim) }}{{ previsao.porSalario ? ' · entre salários' : '' }}</v-card-subtitle>
               <template #append>
-                <v-btn size="small" variant="text" color="primary" to="/planejamento" append-icon="mdi-chevron-right">Planejar</v-btn>
+                <v-btn size="small" variant="text" color="primary" to="/previsao" append-icon="mdi-chevron-right">Ver tudo</v-btn>
               </template>
             </v-card-item>
-            <v-card-text>
-              <div class="d-flex justify-space-between align-end mb-4">
-                <div>
-                  <div class="rotulo">Sobra prevista</div>
-                  <div class="medio" :class="r.planejamento.resultadoPrevisto < 0 ? 'text-error' : 'text-success'" data-testid="sobra-prevista">
-                    {{ brl(r.planejamento.resultadoPrevisto) }}
+            <v-card-text class="d-flex flex-column ga-3">
+              <v-sheet v-for="p in previsao.periodos" :key="p.inicio" rounded="lg" :color="p.atual ? 'surface-variant' : undefined"
+                :border="!p.atual" class="pa-3" data-testid="periodo-resumo">
+                <div class="d-flex align-center">
+                  <div>
+                    <div class="font-weight-bold">{{ p.titulo }}</div>
+                    <div class="text-caption text-medium-emphasis">{{ dataBr(p.inicio) }} a {{ dataBr(p.fim) }}<template v-if="p.atual"> · agora</template></div>
+                  </div>
+                  <v-spacer />
+                  <div class="text-right">
+                    <div class="rotulo">Sobra</div>
+                    <div class="valor" :class="p.saldoFim < 0 ? 'text-error' : 'text-success'">{{ brl(p.saldoFim) }}</div>
                   </div>
                 </div>
-                <div class="text-right">
-                  <div class="rotulo">Receitas</div>
-                  <div class="valor">{{ brl(r.planejamento.totalReceitas) }}</div>
+                <div class="d-flex flex-wrap ga-x-4 text-caption mt-2">
+                  <span>Começa com <b class="valor">{{ brl(p.saldoInicio) }}</b></span>
+                  <span class="text-success">+ entradas {{ brl(p.entradas) }}</span>
+                  <span class="text-error">− contas {{ brl(p.contas) }}</span>
+                  <span v-if="p.faturas" class="text-error">− faturas {{ brl(p.faturas) }}</span>
                 </div>
-              </div>
-              <div v-for="p in previsao" :key="p.nome" class="mb-3">
-                <div class="d-flex justify-space-between text-body-2 mb-1">
-                  <span>{{ p.nome }}</span><span class="valor">{{ brl(p.valor) }}</span>
-                </div>
-                <v-progress-linear :model-value="p.pct" :color="p.cor" height="8" rounded bg-opacity="0.12" />
+              </v-sheet>
+              <div class="text-caption text-medium-emphasis">
+                Sobra = o que fica livre para o dia a dia, se tudo for pago. Cartão entra pela fatura, no dia em que vence.
               </div>
             </v-card-text>
           </v-card>
@@ -198,7 +290,10 @@ const previsao = computed(() => {
         <!-- ===== Para onde foi ===== -->
         <v-col cols="12" :md="r.faturasAbertas.length ? 7 : 12">
           <v-card class="h-100">
-            <v-card-item><v-card-title class="font-weight-bold">Para onde foi o dinheiro</v-card-title></v-card-item>
+            <v-card-item>
+              <v-card-title class="font-weight-bold">Para onde foi o dinheiro</v-card-title>
+              <template #append><v-btn size="small" variant="text" color="primary" to="/relatorios" append-icon="mdi-chevron-right">Comparar meses</v-btn></template>
+            </v-card-item>
             <v-card-text>
               <div v-if="!gastos.length" class="d-flex align-center ga-3">
                 <v-avatar color="info" variant="tonal" rounded="lg"><v-icon>mdi-chart-donut</v-icon></v-avatar>
@@ -237,7 +332,10 @@ const previsao = computed(() => {
         <!-- ===== Cartões ===== -->
         <v-col v-if="r.faturasAbertas.length" cols="12" md="5">
           <v-card class="h-100">
-            <v-card-item><v-card-title class="font-weight-bold">Cartões</v-card-title></v-card-item>
+            <v-card-item>
+              <v-card-title class="font-weight-bold">Cartões</v-card-title>
+              <template #append><v-btn size="small" variant="text" color="primary" to="/cartoes" append-icon="mdi-chevron-right">Todos</v-btn></template>
+            </v-card-item>
             <v-card-text class="d-flex flex-column ga-3">
               <v-card
                 v-for="f in r.faturasAbertas"
@@ -252,6 +350,11 @@ const previsao = computed(() => {
                 </div>
                 <div class="medio mt-4">{{ brl(f.restante || f.total) }}</div>
                 <div class="text-caption" style="opacity: 0.85">Fatura de {{ nomeMes(f.mes.slice(0, 7), true) }} · vence {{ dataBr(f.vencimento) }}</div>
+                <template v-for="c in [estado.contas.find((x) => x.id === f.cartaoId)]" :key="c?.id">
+                  <div v-if="c?.limite && f.status === 'Aberta'" class="text-caption mt-1" style="opacity: 0.85">
+                    Limite disponível {{ brl(c.limite - (c.limiteUsado ?? 0)) }}
+                  </div>
+                </template>
               </v-card>
             </v-card-text>
           </v-card>

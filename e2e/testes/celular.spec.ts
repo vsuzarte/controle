@@ -24,7 +24,7 @@ test.describe('celular', () => {
   })
 
   test('não há rolagem horizontal', async ({ page, api: _ }) => {
-    for (const rota of ['/', '/lancamentos', '/contas-do-mes', '/planejamento', '/cartoes', '/cadastros']) {
+    for (const rota of ['/', '/lancamentos', '/contas-do-mes', '/previsao', '/planejamento', '/cartoes', '/relatorios', '/cadastros']) {
       await page.goto(rota)
       await page.waitForLoadState('networkidle')
       const largura = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)

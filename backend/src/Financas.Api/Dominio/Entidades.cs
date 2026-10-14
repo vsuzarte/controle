@@ -1,12 +1,15 @@
 namespace Financas.Api.Dominio;
 
-public enum TipoConta { Corrente, Poupanca, Dinheiro, CarteiraDigital, CartaoCredito }
+/// <summary>Beneficio = vale-refeição/alimentação: tem saldo, mas só serve para compras (não paga contas).</summary>
+public enum TipoConta { Corrente, Poupanca, Dinheiro, CarteiraDigital, CartaoCredito, Beneficio }
 public enum TipoCategoria { Receita, Despesa }
 public enum TipoLancamento { Receita, Despesa, Transferencia }
 public enum StatusLancamento { Previsto, Realizado, Cancelado }
 public enum FormaPagamento { Pix, Boleto, DebitoAutomatico, CartaoCredito, CartaoDebito, Dinheiro, Transferencia, Outro }
 public enum ModoRegra { Recorrente, Parcelado }
 public enum Frequencia { Semanal, Mensal, Anual }
+/// <summary>Como achar o dia do vencimento em regras mensais. Nulo = dia fixo (o dia de DataInicio).</summary>
+public enum RegraVencimento { DiaFixo, DiaUtil, UltimoDia, UltimoDiaUtil }
 
 /// <summary>Marca entidades cujas alterações vão para a trilha de auditoria e que nunca podem ser excluídas.</summary>
 public interface IAuditavel
@@ -25,10 +28,15 @@ public class Conta : IAuditavel
     public int? DiaFechamento { get; set; }
     /// <summary>Somente cartão: dia de vencimento da fatura.</summary>
     public int? DiaVencimento { get; set; }
+    /// <summary>Somente cartão: limite de crédito atual. Pode ser ajustado a qualquer momento (fica na auditoria).</summary>
+    public decimal? Limite { get; set; }
     public bool Ativa { get; set; } = true;
     public DateTime CriadoEm { get; set; } = DateTime.UtcNow;
 
     public bool EhCartao => Tipo == TipoConta.CartaoCredito;
+    public bool EhBeneficio => Tipo == TipoConta.Beneficio;
+    /// <summary>Dinheiro que paga contas: tudo menos cartão e vale.</summary>
+    public bool EhDisponivel => !EhCartao && !EhBeneficio;
 }
 
 public class Categoria : IAuditavel
@@ -71,6 +79,9 @@ public class Lancamento : IAuditavel
     /// <summary>Somente cartão: mês (dia 1) de vencimento da fatura a que o lançamento pertence.</summary>
     public DateOnly? FaturaMes { get; set; }
 
+    /// <summary>Parte do valor pago que foi juros/multa por atraso (informada ao confirmar o pagamento).</summary>
+    public decimal? Juros { get; set; }
+
     public Guid? EstornoDeId { get; set; }
     public string? MotivoCancelamento { get; set; }
     public DateTime CriadoEm { get; set; } = DateTime.UtcNow;
@@ -99,6 +110,15 @@ public class Regra : IAuditavel
     public bool ValorVariavel { get; set; }
     public int? Parcelas { get; set; }
     public Frequencia Frequencia { get; set; } = Frequencia.Mensal;
+    /// <summary>Mensal: dia fixo (nulo), N-ésimo dia útil, último dia ou último dia útil do mês.</summary>
+    public RegraVencimento? Vencimento { get; set; }
+    /// <summary>Com Vencimento = DiaUtil: qual dia útil (ex.: 5 para "quinto dia útil").</summary>
+    public int? DiaUtilNumero { get; set; }
+    /// <summary>
+    /// Receita que é dia de pagamento (salário, adiantamento): divide a previsão em períodos.
+    /// Nulo = automático (receitas recorrentes da categoria Salário).
+    /// </summary>
+    public bool? IniciaPeriodo { get; set; }
     public int Intervalo { get; set; } = 1;
     public DateOnly DataInicio { get; set; }
     public DateOnly? DataFim { get; set; }

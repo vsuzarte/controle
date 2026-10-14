@@ -106,8 +106,8 @@ const categoriasDisponiveis = computed(() =>
           <v-col cols="6" md="3"><div class="rotulo">Fixas e parcelas</div><div class="valor text-h6">{{ brl(p.totalCompromissos) }}</div><div class="text-caption">{{ brl(p.compromissosPagos) }} pago</div></v-col>
           <v-col cols="6" md="3"><div class="rotulo">Variáveis</div><div class="valor text-h6">{{ brl(p.totalVariaveis) }}</div><div class="text-caption">{{ brl(p.gastoVariavel) }} gasto</div></v-col>
           <v-col cols="6" md="3">
-            <div class="rotulo">Sobra prevista</div>
-            <div class="valor text-h6" :class="p.resultadoPrevisto < 0 ? 'text-error' : 'text-primary'">{{ brl(p.resultadoPrevisto) }}</div>
+            <div class="rotulo">Sobra no orçamento</div>
+            <div class="valor text-h6" :class="p.resultadoPrevisto < 0 ? 'text-error' : 'text-primary'" data-testid="sobra-prevista">{{ brl(p.resultadoPrevisto) }}</div>
             <div class="text-caption">receitas − fixas − variáveis</div>
           </v-col>
         </v-row>

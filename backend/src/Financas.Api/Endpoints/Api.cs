@@ -62,6 +62,10 @@ public static class Api
         MapearPlanejamento(api);
 
         api.MapGet("/resumo", (ResumoService s) => s.Obter());
+        // Previsão do ciclo de salário que contém a data (padrão: hoje).
+        api.MapGet("/previsao", (PrevisaoService s, DateOnly? data) => s.Obter(data));
+        api.MapGet("/relatorios/comparativo", (RelatorioService s, IRelogio relogio, string? mes, int? meses) =>
+            s.Comparativo(string.IsNullOrEmpty(mes) ? relogio.Hoje : Calendario.ParseMes(mes), meses ?? 6));
 
         api.MapGet("/auditoria", async (AppDbContext db, Guid? entidadeId, int? limite) =>
         {
@@ -73,15 +77,27 @@ public static class Api
 
     private static void MapearCadastros(RouteGroupBuilder api)
     {
-        api.MapGet("/contas", async (AppDbContext db, ResumoService resumo, IRelogio relogio) =>
+        api.MapGet("/contas", async (AppDbContext db, ResumoService resumo, CartaoService cartoes, IRelogio relogio) =>
         {
             var saldos = await resumo.Saldos(relogio.Hoje);
+            var limitesUsados = await cartoes.LimitesUsados();
             var contas = await db.Contas.OrderBy(c => c.Tipo).ThenBy(c => c.Nome).ToListAsync();
             return contas.Select(c => new
             {
-                c.Id, c.Nome, c.Tipo, c.SaldoInicial, c.Cor, c.DiaFechamento, c.DiaVencimento, c.Ativa,
+                c.Id, c.Nome, c.Tipo, c.SaldoInicial, c.Cor, c.DiaFechamento, c.DiaVencimento, c.Ativa, c.Limite,
                 Saldo = c.SaldoInicial + saldos.GetValueOrDefault(c.Id),
+                LimiteUsado = c.EhCartao ? limitesUsados.GetValueOrDefault(c.Id) : (decimal?)null,
             });
+        });
+        // Bancos mudam o limite com frequência: ajuste rápido, com motivo, registrado na auditoria.
+        api.MapPut("/contas/{id:guid}/limite", async (Guid id, LimiteDto dto, AppDbContext db) =>
+        {
+            var c = await db.Contas.FindAsync(id) ?? throw new RegraNegocioException("Cartão não encontrado.");
+            if (!c.EhCartao) throw new RegraNegocioException("Limite só existe para cartão de crédito.");
+            c.Limite = Validar.Limite(dto.Limite);
+            db.DefinirAuditoria("Ajuste de limite", dto.Motivo);
+            await db.SaveChangesAsync();
+            return new { c.Id, c.Limite };
         });
         api.MapPost("/contas", async (ContaDto dto, AppDbContext db) =>
         {
@@ -135,11 +151,13 @@ public static class Api
                 throw new RegraNegocioException("Informe os dias de fechamento e vencimento do cartão (1 a 31).");
             c.DiaFechamento = dto.DiaFechamento;
             c.DiaVencimento = dto.DiaVencimento;
+            c.Limite = Validar.Limite(dto.Limite);
         }
         else
         {
             c.DiaFechamento = null;
             c.DiaVencimento = null;
+            c.Limite = null;
         }
     }
 
@@ -228,6 +246,8 @@ public static class Api
                     r.Id, r.Modo, r.Tipo, r.Descricao, r.CategoriaId, Categoria = r.Categoria!.Nome, CategoriaCor = r.Categoria.Cor,
                     r.ContaId, Conta = r.Conta!.Nome, r.FormaPagamento, r.Valor, r.ValorVariavel, r.Parcelas,
                     r.Frequencia, r.Intervalo, r.DataInicio, r.DataFim, r.Ativa, r.Observacao,
+                    Vencimento = r.Vencimento ?? RegraVencimento.DiaFixo, r.DiaUtilNumero,
+                    IniciaPeriodo = r.Tipo == TipoLancamento.Receita && (r.IniciaPeriodo ?? PrevisaoService.EhSalario(r.Categoria.Nome)),
                     Realizadas = meus.Count(l => l.Status == StatusLancamento.Realizado),
                     Pendentes = meus.Count(l => l.Status == StatusLancamento.Previsto),
                     ProximaData = proximo?.Data,
@@ -244,6 +264,11 @@ public static class Api
 
     private static void MapearCartoes(RouteGroupBuilder api)
     {
+        api.MapGet("/cartoes/todos", async (CartaoService s, RegraService regras) =>
+        {
+            await regras.Sincronizar();
+            return await s.Todos();
+        });
         var g = api.MapGroup("/cartoes/{id:guid}/faturas");
         g.MapGet("/", async (Guid id, CartaoService s, RegraService regras) =>
         {
