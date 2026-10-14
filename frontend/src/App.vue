@@ -12,7 +12,9 @@ import HistoricoDialog from './components/HistoricoDialog.vue'
 import MoverParcelasDialog from './components/MoverParcelasDialog.vue'
 import PagarFaturaDialog from './components/PagarFaturaDialog.vue'
 
-const { mdAndUp } = useDisplay()
+const { mdAndUp, height } = useDisplay()
+/** Tela baixa (notebook, janela reduzida): menu mais compacto para caber sem barra de rolagem. */
+const menuCompacto = computed(() => height.value < 820)
 const route = useRoute()
 const pronto = ref(false)
 const senha = ref('')
@@ -105,13 +107,13 @@ onMounted(() => {
       <!-- ===== Computador: barra lateral ===== -->
       <v-navigation-drawer v-if="mdAndUp" permanent :rail="recolhido" width="240" rail-width="76" color="background" border="0">
         <!-- Logo, ícones do menu e botões de baixo na mesma coluna (aberto: x=32; recolhido: centro do trilho). -->
-        <v-list-item class="py-6 logo" :style="{ paddingInline: recolhido ? '18px' : '12px' }">
+        <v-list-item :class="menuCompacto ? 'py-3 logo' : 'py-6 logo'" :style="{ paddingInline: recolhido ? '18px' : '12px' }">
           <template #prepend>
             <v-avatar class="destaque" rounded="lg" size="40"><v-icon color="white">mdi-chart-timeline-variant-shimmer</v-icon></v-avatar>
           </template>
           <v-list-item-title class="text-h6 font-weight-bold">Finanças</v-list-item-title>
         </v-list-item>
-        <v-list nav color="primary" class="px-3" bg-color="transparent">
+        <v-list nav color="primary" class="px-3 py-0" bg-color="transparent" :density="menuCompacto ? 'compact' : 'default'">
           <v-tooltip v-for="m in menu" :key="m.to" :text="m.titulo" location="end" :disabled="!recolhido">
             <template #activator="{ props: dica }">
               <v-list-item
@@ -122,21 +124,21 @@ onMounted(() => {
                 :aria-label="m.titulo"
                 rounded="lg"
                 exact
-                class="mb-1"
+                :class="menuCompacto ? 'mb-0' : 'mb-1'"
               />
             </template>
           </v-tooltip>
         </v-list>
         <template #append>
-          <div :class="recolhido ? 'pa-3 d-flex flex-column align-center ga-2' : 'pa-4'">
+          <div :class="recolhido ? (menuCompacto ? 'pa-2 d-flex flex-column align-center ga-1' : 'pa-3 d-flex flex-column align-center ga-2') : (menuCompacto ? 'pa-3' : 'pa-4')">
             <v-tooltip v-if="recolhido" text="Lançar (N)" location="end">
               <template #activator="{ props: dica }">
                 <v-btn v-bind="dica" icon="mdi-plus" color="primary" variant="flat" aria-label="Lançar" @click="novoLancamento()" />
               </template>
             </v-tooltip>
             <template v-else>
-              <v-btn block color="primary" variant="flat" size="x-large" prepend-icon="mdi-plus" @click="novoLancamento()">Lançar</v-btn>
-              <div class="text-caption text-center text-medium-emphasis mt-2">ou aperte <v-chip size="x-small" label>N</v-chip></div>
+              <v-btn block color="primary" variant="flat" :size="menuCompacto ? 'large' : 'x-large'" prepend-icon="mdi-plus" @click="novoLancamento()">Lançar</v-btn>
+              <div v-if="!menuCompacto" class="text-caption text-center text-medium-emphasis mt-2">ou aperte <v-chip size="x-small" label>N</v-chip></div>
             </template>
             <div :class="recolhido ? 'd-flex flex-column align-center ga-1' : 'd-flex justify-center ga-2 mt-2'">
               <v-tooltip :text="TEMAS[preferenciaTema].titulo + ' (clique para trocar)'" location="end">

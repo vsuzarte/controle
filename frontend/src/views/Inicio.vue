@@ -122,7 +122,7 @@ async function agirAlerta(a: Alerta) {
       <!-- ===== Vales ===== -->
       <v-row v-if="r.beneficios.length" dense class="mb-3">
         <!-- Todos os vales numa linha só (até 4; acima disso, quebra em linhas de 4). -->
-        <v-col v-for="b in r.beneficios" :key="b.id" cols="12" sm="6" :md="12 / Math.min(4, r.beneficios.length)">
+        <v-col v-for="b in r.beneficios" :key="b.id" cols="12" sm="6" :md="r.beneficios.length >= 3 ? 12 / Math.min(4, r.beneficios.length) : 6">
           <v-card class="pa-3 d-flex align-center ga-3 h-100" data-testid="vale" :aria-label="b.nome">
             <v-avatar :color="b.cor ?? 'warning'" variant="tonal" rounded="lg"><v-icon>mdi-food</v-icon></v-avatar>
             <div class="flex-grow-1">
