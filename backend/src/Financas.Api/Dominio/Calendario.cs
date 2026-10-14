@@ -76,6 +76,16 @@ public static class Calendario
         }
     }
 
+    /// <summary>
+    /// Até quando dá para pagar sem atraso: conta/boleto que vence em fim de semana ou feriado
+    /// pode ser paga no próximo dia útil.
+    /// </summary>
+    public static DateOnly ProximoDiaUtil(DateOnly d)
+    {
+        while (!DiaUtil(d)) d = d.AddDays(1);
+        return d;
+    }
+
     /// <summary>Segunda a sexta, fora os feriados nacionais (dias em que os bancos não abrem).</summary>
     public static bool DiaUtil(DateOnly d) =>
         d.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday) && !Feriado(d);

@@ -162,7 +162,9 @@ public class RegrasDeNegocioTests
 
         var alertas = (await a.Resumo.Obter()).Alertas;
         var vencida = Assert.Single(alertas, x => x.Tipo == TipoAlerta.Vencido);
-        Assert.Equal(5, vencida.Dias);
+        // Venceu sábado 10/10; segunda 12/10 é feriado: dava para pagar sem atraso até terça 13/10.
+        Assert.Equal(2, vencida.Dias);
+        Assert.Equal(D(2026, 10, 10), vencida.VenceEm);
         Assert.Single(alertas, x => x.Tipo == TipoAlerta.Hoje);
     }
 

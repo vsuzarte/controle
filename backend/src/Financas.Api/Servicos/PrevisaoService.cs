@@ -21,7 +21,9 @@ public record ItemPrevisao(
     Guid? RegraId,
     Guid? CartaoId,
     DateOnly? FaturaMes,
-    decimal? Juros);
+    decimal? Juros,
+    /// <summary>Vence em fim de semana/feriado: dá para pagar sem atraso até este dia útil (é ele que define o período).</summary>
+    DateOnly? PagavelAte = null);
 
 public record PeriodoPrevisao(
     DateOnly Inicio,
@@ -286,11 +288,20 @@ public class PrevisaoService(AppDbContext db, IRelogio relogio, RegraService reg
     private decimal SaldoEm(Dados d, DateOnly data)
     {
         if (data < Hoje) return d.SaldoReal(data);
-        var pendentes = d.Lancamentos.Where(l => l.Status == StatusLancamento.Previsto && l.Data <= data)
+        var pendentes = d.Lancamentos.Where(l => l.Status == StatusLancamento.Previsto && Pagavel(l) <= data)
             .Sum(l => l.Tipo == TipoLancamento.Receita ? l.Valor : -l.Valor);
-        var faturas = d.Faturas.Where(f => f.Fatura.Restante > 0 && f.Fatura.Vencimento <= data).Sum(f => f.Fatura.Restante);
+        var faturas = d.Faturas.Where(f => f.Fatura.Restante > 0 && Calendario.ProximoDiaUtil(f.Fatura.Vencimento) <= data)
+            .Sum(f => f.Fatura.Restante);
         return d.SaldoHoje + pendentes - faturas;
     }
+
+    /// <summary>
+    /// Data que decide com que dinheiro a conta é paga: o vencimento, ou o próximo dia útil quando vence em fim de
+    /// semana/feriado (ex.: escola que vence sábado 07/11 é paga segunda 09/11, com o salário do 5º dia útil).
+    /// Entradas e o que já foi pago ficam na data real.
+    /// </summary>
+    private static DateOnly Pagavel(Lancamento l) =>
+        l.Tipo == TipoLancamento.Despesa && l.Status == StatusLancamento.Previsto ? Calendario.ProximoDiaUtil(l.Data) : l.Data;
 
     private PeriodoPrevisao MontarPeriodo(Dados d, DateOnly inicio, DateOnly fim, string titulo)
     {
@@ -302,22 +313,25 @@ public class PrevisaoService(AppDbContext db, IRelogio relogio, RegraService reg
         foreach (var l in d.Lancamentos.Where(l => l.EstornoDeId is null))
         {
             var pendente = l.Status == StatusLancamento.Previsto;
-            if (!Entra(l.Data, pendente)) continue;
+            var pagavel = Pagavel(l);
+            if (!Entra(pagavel, pendente)) continue;
             if (l.Tipo == TipoLancamento.Despesa && !l.Programado) continue;
             itens.Add(new ItemPrevisao(
                 l.Tipo == TipoLancamento.Receita ? TipoItemPrevisao.Entrada : TipoItemPrevisao.Conta,
                 l.Descricao, l.Categoria?.Nome, l.Categoria?.Cor, l.Categoria?.Icone, l.Data, l.Valor,
-                pendente ? 0 : l.Valor, pendente, pendente && l.Data < Hoje,
-                l.Id, l.RegraId, null, null, l.Juros));
+                pendente ? 0 : l.Valor, pendente, pendente && pagavel < Hoje,
+                l.Id, l.RegraId, null, null, l.Juros, pagavel != l.Data ? pagavel : null));
         }
         foreach (var (f, cor) in d.Faturas)
         {
             var pendente = f.Restante > 0;
-            if (!Entra(f.Vencimento, pendente)) continue;
+            var pagavel = pendente ? Calendario.ProximoDiaUtil(f.Vencimento) : f.Vencimento;
+            if (!Entra(pagavel, pendente)) continue;
             itens.Add(new ItemPrevisao(TipoItemPrevisao.Fatura, $"Fatura {f.Cartao}", StatusTexto(f.Status), cor, "mdi-credit-card-outline",
-                f.Vencimento, f.Total, f.Pago, pendente, pendente && f.Vencimento < Hoje, null, null, f.CartaoId, f.Mes, null));
+                f.Vencimento, f.Total, f.Pago, pendente, pendente && pagavel < Hoje, null, null, f.CartaoId, f.Mes, null,
+                pagavel != f.Vencimento ? pagavel : null));
         }
-        itens = itens.OrderBy(i => i.Data).ThenBy(i => i.Tipo).ToList();
+        itens = itens.OrderBy(i => i.PagavelAte ?? i.Data).ThenBy(i => i.Tipo).ToList();
 
         var diaADia = d.Lancamentos
             .Where(l => l.Tipo == TipoLancamento.Despesa && !l.Programado && l.Status == StatusLancamento.Realizado

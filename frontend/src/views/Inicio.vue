@@ -46,9 +46,10 @@ const proximoPagamento = computed(() => (periodoAtual.value ? somarDias(periodoA
 // ----- Vencimentos até o próximo salário -----
 const corAlerta = (a: Alerta) => (a.tipo === 'Vencido' ? 'error' : a.tipo === 'Hoje' ? 'warning' : 'info')
 const textoAlerta = (a: Alerta) =>
-  a.tipo === 'Vencido'
+  (a.venceEm ? `vence ${dataBr(a.venceEm, true)}, paga até ${dataBr(a.data, true)} · ` : '') +
+  (a.tipo === 'Vencido'
     ? `venceu há ${a.dias} dia${a.dias > 1 ? 's' : ''}`
-    : a.tipo === 'Hoje' ? 'vence hoje' : `${dataBr(a.data)} · em ${a.dias} dia${a.dias > 1 ? 's' : ''}`
+    : a.tipo === 'Hoje' ? (a.venceEm ? 'último dia hoje' : 'vence hoje') : `${a.venceEm ? '' : dataBr(a.data) + ' · '}em ${a.dias} dia${a.dias > 1 ? 's' : ''}`)
 const iconeAlerta = (a: Alerta) => (a.cartaoId ? 'mdi-credit-card-outline' : a.tipoLancamento === 'Receita' ? 'mdi-cash-plus' : 'mdi-receipt-text-outline')
 
 const vencimentos = computed(() => separarVencimentos(r.value?.alertas ?? []))

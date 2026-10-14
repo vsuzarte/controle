@@ -256,7 +256,9 @@ async function agir(i: ItemPrevisao) {
                     </template>
                     <v-list-item-title :class="{ 'riscado': !i.pendente }">{{ i.descricao }}</v-list-item-title>
                     <v-list-item-subtitle>
-                      {{ dataBr(i.data) }}<template v-if="i.detalhe"> · {{ i.detalhe }}</template>
+                      <template v-if="i.pagavelAte && i.pendente">vence {{ dataBr(i.data, true) }} · pode pagar até {{ dataBr(i.pagavelAte, true) }}</template>
+                      <template v-else>{{ dataBr(i.data) }}</template>
+                      <template v-if="i.detalhe"> · {{ i.detalhe }}</template>
                       <template v-if="i.juros"> · <span class="text-warning">juros {{ brl(i.juros) }}</span></template>
                     </v-list-item-subtitle>
                     <template #append>

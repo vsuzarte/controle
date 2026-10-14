@@ -18,7 +18,9 @@ public record Alerta(
     Guid? LancamentoId,
     Guid? CartaoId,
     DateOnly? FaturaMes,
-    Guid? RegraId = null);
+    Guid? RegraId = null,
+    /// <summary>Vencimento original quando cai em fim de semana/feriado (Data passa a ser o próximo dia útil).</summary>
+    DateOnly? VenceEm = null);
 
 /// <summary>Vale-refeição/alimentação: saldo, próxima recarga e até quando dura no ritmo dos últimos 30 dias.</summary>
 public record BeneficioView(Guid Id, string Nome, string? Cor, decimal Saldo, DateOnly? ProximaRecarga, decimal? ValorRecarga,
@@ -83,8 +85,10 @@ public class ResumoService(AppDbContext db, IRelogio relogio, PlanejamentoServic
         var pendentes = todosPendentes.Where(l => l.Data <= fimMes).ToList();
 
         var alertas = todosPendentes
-            .Where(l => l.Data <= limiteAlertas && l.Tipo != TipoLancamento.Transferencia)
-            .Select(l => NovoAlerta(hoje, l.Data, l.Descricao, l.Valor, l.Tipo, l.Id, null, null) with { RegraId = l.RegraId })
+            .Select(l => (l, pagavel: l.Tipo == TipoLancamento.Despesa ? Calendario.ProximoDiaUtil(l.Data) : l.Data))
+            .Where(x => x.pagavel <= limiteAlertas && x.l.Tipo != TipoLancamento.Transferencia)
+            .Select(x => NovoAlerta(hoje, x.pagavel, x.l.Descricao, x.l.Valor, x.l.Tipo, x.l.Id, null, null)
+                with { RegraId = x.l.RegraId, VenceEm = x.pagavel != x.l.Data ? x.l.Data : null })
             .ToList();
 
         var faturasAbertas = new List<FaturaView>();
@@ -95,9 +99,10 @@ public class ResumoService(AppDbContext db, IRelogio relogio, PlanejamentoServic
             foreach (var f in faturas.Where(f => f.Restante > 0 || f.Status == StatusFatura.Aberta))
             {
                 if (f.Vencimento <= fimMes) faturasAPagar += f.Restante;
-                if (f.Restante > 0 && f.Vencimento <= limiteAlertas)
-                    alertas.Add(NovoAlerta(hoje, f.Vencimento, $"Fatura {cartao.Nome} {f.Mes:MM/yyyy}", f.Restante,
-                        TipoLancamento.Despesa, null, cartao.Id, f.Mes));
+                var pagavelFatura = Calendario.ProximoDiaUtil(f.Vencimento);
+                if (f.Restante > 0 && pagavelFatura <= limiteAlertas)
+                    alertas.Add(NovoAlerta(hoje, pagavelFatura, $"Fatura {cartao.Nome} {f.Mes:MM/yyyy}", f.Restante,
+                        TipoLancamento.Despesa, null, cartao.Id, f.Mes) with { VenceEm = pagavelFatura != f.Vencimento ? f.Vencimento : null });
                 if (f.Status is StatusFatura.Aberta or StatusFatura.Fechada or StatusFatura.Vencida)
                     faturasAbertas.Add(f with { Lancamentos = [], Pagamentos = [] });
             }

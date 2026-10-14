@@ -148,6 +148,8 @@ export interface Alerta {
   cartaoId: string | null
   faturaMes: string | null
   regraId: string | null
+  /** Vencimento original quando cai em fim de semana/feriado; "data" já é o próximo dia útil. */
+  venceEm: string | null
 }
 
 export interface Resumo {
@@ -198,6 +200,8 @@ export interface ItemPrevisao {
   cartaoId: string | null
   faturaMes: string | null
   juros: number | null
+  /** Vence em fim de semana/feriado: dá para pagar até este dia útil (é ele que define o período). */
+  pagavelAte: string | null
 }
 
 export interface PeriodoPrevisao {

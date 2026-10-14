@@ -238,6 +238,33 @@ public class NovidadesTests
     }
 
     [Fact]
+    public async Task Conta_que_vence_no_fim_de_semana_e_paga_com_o_dinheiro_do_proximo_dia_util()
+    {
+        using var a = new Ambiente(); // hoje 15/10/2026
+        await Salario(a, "Salário", 4000, D(2026, 11, 1), RegraVencimento.DiaUtil, 5); // 09/11 (segunda)
+        await Salario(a, "Adiantamento", 2000, D(2026, 10, 20));
+        var escola = new Categoria { Nome = "Educação", Tipo = TipoCategoria.Despesa };
+        a.Db.Categorias.Add(escola);
+        await a.Db.SaveChangesAsync();
+        await a.Recorrente(TipoLancamento.Despesa, escola, 814.67m, D(2026, 11, 7)); // sábado
+
+        Assert.Equal(D(2026, 11, 9), Calendario.ProximoDiaUtil(D(2026, 11, 7)));
+        Assert.Equal(D(2026, 11, 3), Calendario.ProximoDiaUtil(D(2026, 11, 2))); // Finados
+
+        var p = await a.Previsao.Obter();
+        var adiantamento = p.Periodos.Single(x => x.Inicio == D(2026, 10, 20));
+        var salario = p.Periodos.Single(x => x.Inicio == D(2026, 11, 9));
+        Assert.DoesNotContain(adiantamento.Itens, i => i.Descricao == "Educação");
+        var item = Assert.Single(salario.Itens, i => i.Descricao == "Educação");
+        Assert.Equal(D(2026, 11, 7), item.Data);
+        Assert.Equal(D(2026, 11, 9), item.PagavelAte);
+
+        var alerta = (await a.Resumo.Obter()).Alertas.Single(x => x.Descricao == "Educação");
+        Assert.Equal(D(2026, 11, 9), alerta.Data);
+        Assert.Equal(D(2026, 11, 7), alerta.VenceEm);
+    }
+
+    [Fact]
     public async Task Sem_salario_cadastrado_a_previsao_e_o_mes()
     {
         using var a = new Ambiente();

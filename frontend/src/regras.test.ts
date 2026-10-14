@@ -5,7 +5,7 @@ import type { Alerta } from './tipos'
 
 const alerta = (a: Partial<Alerta>): Alerta => ({
   tipo: 'Proximo', dias: 3, descricao: 'Conta', valor: 100, data: '2026-10-18', tipoLancamento: 'Despesa',
-  lancamentoId: crypto.randomUUID(), cartaoId: null, faturaMes: null, regraId: null, ...a,
+  lancamentoId: crypto.randomUUID(), cartaoId: null, faturaMes: null, regraId: null, venceEm: null, ...a,
 })
 
 describe('juros no pagamento', () => {
