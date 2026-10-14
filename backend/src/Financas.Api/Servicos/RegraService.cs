@@ -53,6 +53,7 @@ public class RegraService(AppDbContext db, IRelogio relogio)
             if (regra.Vencimento is not (null or RegraVencimento.DiaFixo))
                 regra.DataInicio = Calendario.Ocorrencia(regra, 1);
             regra.IniciaPeriodo = regra.Tipo == TipoLancamento.Receita ? dto.IniciaPeriodo : null;
+            regra.PagoComRegraId = await PagoCom(regra, dto.PagoComRegraId);
         }
         if (regra.DataFim is { } fim && fim < regra.DataInicio)
             throw new RegraNegocioException("A data final não pode ser anterior à data inicial.");
@@ -81,6 +82,7 @@ public class RegraService(AppDbContext db, IRelogio relogio)
                 throw new RegraNegocioException("A data final não pode ser anterior à data inicial.");
             regra.DataFim = dto.DataFim;
             if (regra.Tipo == TipoLancamento.Receita && dto.IniciaPeriodo is not null) regra.IniciaPeriodo = dto.IniciaPeriodo;
+            regra.PagoComRegraId = await PagoCom(regra, dto.PagoComRegraId);
         }
 
         // Mudou o dia do vencimento (ex.: "dia 9" para "5º dia útil"): recalcula as datas dos previstos
@@ -224,6 +226,16 @@ public class RegraService(AppDbContext db, IRelogio relogio)
         else if (regra.Vencimento is { } v)
             regra.DataInicio = Calendario.DataNoMes(regra.DataInicio, v, regra.DiaUtilNumero);
         return antes != (regra.Vencimento ?? RegraVencimento.DiaFixo, regra.DiaUtilNumero, regra.DataInicio);
+    }
+
+    /// <summary>Valida o "pagar com": só contas, e só com uma entrada recorrente ativa (salário, adiantamento...).</summary>
+    private async Task<Guid?> PagoCom(Regra regra, Guid? pagamentoId)
+    {
+        if (pagamentoId is null || regra.Tipo != TipoLancamento.Despesa) return null;
+        var pagamento = await db.Regras.FindAsync(pagamentoId.Value);
+        if (pagamento is not { Tipo: TipoLancamento.Receita, Modo: ModoRegra.Recorrente, Ativa: true })
+            throw new RegraNegocioException("Escolha um dia de pagamento ativo (uma entrada recorrente, como o salário).");
+        return pagamento.Id;
     }
 
     public async Task<Regra> Obter(Guid id) =>

@@ -91,6 +91,9 @@ export interface Regra {
   vencimento: RegraVencimento
   diaUtilNumero: number | null
   iniciaPeriodo: boolean
+  /** Contas: dia de pagamento que paga esta conta na previsão (null = automático). */
+  pagoComRegraId: string | null
+  pagoCom: string | null
 }
 
 export type StatusFatura = 'Aberta' | 'Fechada' | 'Paga' | 'Vencida' | 'Futura'
@@ -202,6 +205,11 @@ export interface ItemPrevisao {
   juros: number | null
   /** Vence em fim de semana/feriado: dá para pagar até este dia útil (é ele que define o período). */
   pagavelAte: string | null
+  /** Conta marcada "pagar com": o pagamento e o dia em que entra o dinheiro. */
+  pagoCom: string | null
+  pagarEm: string | null
+  /** Pagando com esse dinheiro, fica X dias depois do prazo sem juros. */
+  diasDepoisDoVencimento: number | null
 }
 
 export interface PeriodoPrevisao {

@@ -23,7 +23,12 @@ public record ItemPrevisao(
     DateOnly? FaturaMes,
     decimal? Juros,
     /// <summary>Vence em fim de semana/feriado: dá para pagar sem atraso até este dia útil (é ele que define o período).</summary>
-    DateOnly? PagavelAte = null);
+    DateOnly? PagavelAte = null,
+    /// <summary>Conta marcada para ser paga com um dia de pagamento: o nome dele e o dia em que entra o dinheiro.</summary>
+    string? PagoCom = null,
+    DateOnly? PagarEm = null,
+    /// <summary>Quantos dias depois do prazo sem juros a conta seria paga com esse dinheiro (risco de multa).</summary>
+    int? DiasDepoisDoVencimento = null);
 
 public record PeriodoPrevisao(
     DateOnly Inicio,
@@ -242,7 +247,8 @@ public class PrevisaoService(AppDbContext db, IRelogio relogio, RegraService reg
         Func<DateOnly, decimal> SaldoReal,
         List<Lancamento> Lancamentos,
         List<(FaturaView Fatura, string? Cor)> Faturas,
-        HashSet<Guid> Disponiveis);
+        HashSet<Guid> Disponiveis,
+        Dictionary<Guid, List<DiaPagamento>> Pagamentos);
 
     private async Task<Dados> Carregar(DateOnly de, DateOnly ate)
     {
@@ -270,7 +276,7 @@ public class PrevisaoService(AppDbContext db, IRelogio relogio, RegraService reg
         var saldoHoje = saldoInicial + efeitos.Where(e => e.Data <= Hoje).Sum(e => e.v);
         decimal SaldoReal(DateOnly d) => saldoInicial + efeitos.Where(e => e.Data <= d).Sum(e => e.v);
 
-        var lancamentos = await db.Lancamentos.Include(l => l.Categoria).Include(l => l.Conta)
+        var lancamentos = await db.Lancamentos.Include(l => l.Categoria).Include(l => l.Conta).Include(l => l.Regra)
             .Where(l => l.Status != StatusLancamento.Cancelado && l.Tipo != TipoLancamento.Transferencia
                         && l.Data <= ate && (l.Data >= de || l.Status == StatusLancamento.Previsto))
             .OrderBy(l => l.Data).ThenBy(l => l.CriadoEm)
@@ -281,14 +287,16 @@ public class PrevisaoService(AppDbContext db, IRelogio relogio, RegraService reg
         foreach (var c in contas.Where(c => c.EhCartao && c.Ativa))
             faturas.AddRange((await cartoes.Faturas(c.Id)).Where(f => f.Total > 0 || f.Pago > 0).Select(f => (f, c.Cor)));
 
-        return new Dados(saldoHoje, SaldoReal, lancamentos, faturas, disponiveis);
+        var pagamentos = (await DiasDePagamento(ate.AddMonths(-6), ate.AddMonths(2)))
+            .GroupBy(p => p.RegraId).ToDictionary(g => g.Key, g => g.ToList());
+        return new Dados(saldoHoje, SaldoReal, lancamentos, faturas, disponiveis, pagamentos);
     }
 
     /// <summary>Saldo do dinheiro disponível no fim do dia informado (real no passado, projetado do hoje em diante).</summary>
     private decimal SaldoEm(Dados d, DateOnly data)
     {
         if (data < Hoje) return d.SaldoReal(data);
-        var pendentes = d.Lancamentos.Where(l => l.Status == StatusLancamento.Previsto && Pagavel(l) <= data)
+        var pendentes = d.Lancamentos.Where(l => l.Status == StatusLancamento.Previsto && Pagavel(d, l).Data <= data)
             .Sum(l => l.Tipo == TipoLancamento.Receita ? l.Valor : -l.Valor);
         var faturas = d.Faturas.Where(f => f.Fatura.Restante > 0 && Calendario.ProximoDiaUtil(f.Fatura.Vencimento) <= data)
             .Sum(f => f.Fatura.Restante);
@@ -300,8 +308,22 @@ public class PrevisaoService(AppDbContext db, IRelogio relogio, RegraService reg
     /// semana/feriado (ex.: escola que vence sábado 07/11 é paga segunda 09/11, com o salário do 5º dia útil).
     /// Entradas e o que já foi pago ficam na data real.
     /// </summary>
-    private static DateOnly Pagavel(Lancamento l) =>
+    private static DateOnly PrazoSemJuros(Lancamento l) =>
         l.Tipo == TipoLancamento.Despesa && l.Status == StatusLancamento.Previsto ? Calendario.ProximoDiaUtil(l.Data) : l.Data;
+
+    /// <summary>
+    /// Em que dia (e com que pagamento) a conta entra na previsão. Conta marcada "pagar com" vai para a ocorrência
+    /// desse pagamento mais próxima do prazo (ex.: escola 07/01 com o salário de 08/01). As demais, pelo prazo.
+    /// </summary>
+    private static (DateOnly Data, DiaPagamento? Pagamento) Pagavel(Dados d, Lancamento l)
+    {
+        var prazo = PrazoSemJuros(l);
+        if (l.Status != StatusLancamento.Previsto || l.Tipo != TipoLancamento.Despesa
+            || l.Regra?.PagoComRegraId is not { } id || !d.Pagamentos.TryGetValue(id, out var dias) || dias.Count == 0)
+            return (prazo, null);
+        var maisProximo = dias.OrderBy(p => Math.Abs(p.Data.DayNumber - prazo.DayNumber)).ThenBy(p => p.Data).First();
+        return (maisProximo.Data, maisProximo);
+    }
 
     private PeriodoPrevisao MontarPeriodo(Dados d, DateOnly inicio, DateOnly fim, string titulo)
     {
@@ -313,14 +335,17 @@ public class PrevisaoService(AppDbContext db, IRelogio relogio, RegraService reg
         foreach (var l in d.Lancamentos.Where(l => l.EstornoDeId is null))
         {
             var pendente = l.Status == StatusLancamento.Previsto;
-            var pagavel = Pagavel(l);
+            var prazo = PrazoSemJuros(l);
+            var (pagavel, pagamento) = Pagavel(d, l);
             if (!Entra(pagavel, pendente)) continue;
             if (l.Tipo == TipoLancamento.Despesa && !l.Programado) continue;
             itens.Add(new ItemPrevisao(
                 l.Tipo == TipoLancamento.Receita ? TipoItemPrevisao.Entrada : TipoItemPrevisao.Conta,
                 l.Descricao, l.Categoria?.Nome, l.Categoria?.Cor, l.Categoria?.Icone, l.Data, l.Valor,
-                pendente ? 0 : l.Valor, pendente, pendente && pagavel < Hoje,
-                l.Id, l.RegraId, null, null, l.Juros, pagavel != l.Data ? pagavel : null));
+                pendente ? 0 : l.Valor, pendente, pendente && prazo < Hoje,
+                l.Id, l.RegraId, null, null, l.Juros, prazo != l.Data ? prazo : null,
+                pagamento?.Nome, pagamento?.Data,
+                pagamento is not null && pagavel > prazo ? pagavel.DayNumber - prazo.DayNumber : null));
         }
         foreach (var (f, cor) in d.Faturas)
         {
@@ -331,7 +356,7 @@ public class PrevisaoService(AppDbContext db, IRelogio relogio, RegraService reg
                 f.Vencimento, f.Total, f.Pago, pendente, pendente && pagavel < Hoje, null, null, f.CartaoId, f.Mes, null,
                 pagavel != f.Vencimento ? pagavel : null));
         }
-        itens = itens.OrderBy(i => i.PagavelAte ?? i.Data).ThenBy(i => i.Tipo).ToList();
+        itens = itens.OrderBy(i => i.PagarEm ?? i.PagavelAte ?? i.Data).ThenBy(i => i.Tipo).ToList();
 
         var diaADia = d.Lancamentos
             .Where(l => l.Tipo == TipoLancamento.Despesa && !l.Programado && l.Status == StatusLancamento.Realizado

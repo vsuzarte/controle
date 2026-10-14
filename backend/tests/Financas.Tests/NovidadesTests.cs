@@ -265,6 +265,34 @@ public class NovidadesTests
     }
 
     [Fact]
+    public async Task Conta_marcada_para_pagar_com_o_salario_vai_para_o_periodo_dele_e_avisa_o_atraso()
+    {
+        using var a = new Ambiente(); // hoje 15/10/2026
+        var salario = await Salario(a, "Salário", 4000, D(2026, 11, 1), RegraVencimento.DiaUtil, 5); // 09/11
+        await Salario(a, "Adiantamento", 2000, D(2026, 10, 20));
+        var escola = await a.Recorrente(TipoLancamento.Despesa, a.Energia, 800, D(2026, 11, 5)); // quinta, antes do salário
+
+        // Automático: vence 05/11, cai no período do adiantamento.
+        var auto = await a.Previsao.Obter();
+        Assert.Contains(auto.Periodos.Single(p => p.Inicio == D(2026, 10, 20)).Itens, i => i.RegraId == escola.Id);
+
+        // Não dá para "pagar com" outra conta.
+        await Assert.ThrowsAsync<RegraNegocioException>(() => a.Regras.Editar(escola.Id, new EditarRegraDto("Escola", a.Energia.Id,
+            a.Banco.Id, FormaPagamento.Boleto, 800, false, null, null, false, null, PagoComRegraId: escola.Id)));
+
+        await a.Regras.Editar(escola.Id, new EditarRegraDto("Escola", a.Energia.Id, a.Banco.Id, FormaPagamento.Boleto, 800, false,
+            null, null, false, null, PagoComRegraId: salario.Id));
+
+        var p = await a.Previsao.Obter();
+        Assert.DoesNotContain(p.Periodos.Single(x => x.Inicio == D(2026, 10, 20)).Itens, i => i.RegraId == escola.Id);
+        var item = Assert.Single(p.Periodos.Single(x => x.Inicio == D(2026, 11, 9)).Itens, i => i.RegraId == escola.Id);
+        Assert.Equal("Salário", item.PagoCom);
+        Assert.Equal(D(2026, 11, 9), item.PagarEm);
+        Assert.Equal(4, item.DiasDepoisDoVencimento);
+        Assert.False(item.Atrasado);
+    }
+
+    [Fact]
     public async Task Sem_salario_cadastrado_a_previsao_e_o_mes()
     {
         using var a = new Ambiente();

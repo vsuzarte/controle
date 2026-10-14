@@ -119,6 +119,11 @@ public class Regra : IAuditavel
     /// Nulo = automático (receitas recorrentes da categoria Salário).
     /// </summary>
     public bool? IniciaPeriodo { get; set; }
+    /// <summary>
+    /// Só contas (despesas): com que dia de pagamento esta conta é paga (Id da entrada recorrente, ex.: salário).
+    /// Nulo = automático, pelo vencimento. Usado só pela previsão.
+    /// </summary>
+    public Guid? PagoComRegraId { get; set; }
     public int Intervalo { get; set; } = 1;
     public DateOnly DataInicio { get; set; }
     public DateOnly? DataFim { get; set; }

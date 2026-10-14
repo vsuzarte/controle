@@ -351,6 +351,9 @@ namespace Financas.Api.Dados.Migrations
                     b.Property<string>("Observacao")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("PagoComRegraId")
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("Parcelas")
                         .HasColumnType("INTEGER");
 

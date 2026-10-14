@@ -46,7 +46,7 @@ const detalhe = (r: Regra) => {
   const freq = r.frequencia === 'Mensal' ? (r.intervalo > 1 ? `a cada ${r.intervalo} meses` : 'todo mês')
     : r.frequencia === 'Anual' ? (r.intervalo > 1 ? `a cada ${r.intervalo} anos` : 'todo ano')
       : r.intervalo > 1 ? `a cada ${r.intervalo} semanas` : 'toda semana'
-  return `${r.categoria} · ${r.conta} · ${quando(r) ?? freq}${r.valorVariavel ? ' · valor varia' : ''}${r.iniciaPeriodo ? ' · dia de pagamento' : ''}`
+  return `${r.categoria} · ${r.conta} · ${quando(r) ?? freq}${r.valorVariavel ? ' · valor varia' : ''}${r.iniciaPeriodo ? ' · dia de pagamento' : ''}${r.pagoCom ? ` · pago com ${r.pagoCom}` : ''}`
 }
 /** "5º dia útil", "último dia útil"... (só para regras mensais que não são dia fixo). */
 const quando = (r: Regra) =>
@@ -77,6 +77,7 @@ const f = reactive({
   diaUtilNumero: 5 as number | null,
   dia: null as number | null,
   iniciaPeriodo: false,
+  pagoComRegraId: null as string | null,
 })
 
 const categorias = computed(() =>
@@ -90,6 +91,11 @@ const contas = computed(() =>
     .map((c) => ({ title: c.nome, value: c.id })),
 )
 const mensal = computed(() => f.frequencia === 'Mensal')
+/** Dias de pagamento cadastrados (entradas marcadas), para escolher com qual dinheiro a conta é paga. */
+const pagamentos = computed(() => [
+  { title: 'Automático (pelo vencimento)', value: null as string | null },
+  ...regras.value.filter((r) => r.ativa && r.tipo === 'Receita' && r.iniciaPeriodo).map((r) => ({ title: r.descricao, value: r.id as string | null })),
+])
 const salarioCategoria = computed(() => estado.categorias.find((c) => c.id === f.categoriaId)?.nome.toLowerCase().startsWith('sal') ?? false)
 // Entrada na categoria Salário já nasce marcada como dia de pagamento.
 watch(() => f.categoriaId, () => { if (!editandoId.value && f.tipo === 'Receita') f.iniciaPeriodo = salarioCategoria.value })
@@ -103,7 +109,7 @@ function nova(tipo: TipoLancamento) {
     contaId: contasAtivas.value.find((c) => c.tipo !== 'CartaoCredito')?.id ?? null,
     formaPagamento: tipo === 'Receita' ? 'Transferencia' : 'Boleto', frequencia: 'Mensal', intervalo: 1,
     dataInicio: hojeIso(), dataFim: null, observacao: '', aplicarAosPrevistos: true, motivo: '',
-    vencimento: 'DiaFixo', diaUtilNumero: 5, dia: null, iniciaPeriodo: false,
+    vencimento: 'DiaFixo', diaUtilNumero: 5, dia: null, iniciaPeriodo: false, pagoComRegraId: null,
   })
   dialogo.value = true
 }
@@ -114,7 +120,7 @@ function editar(r: Regra) {
     tipo: r.tipo, descricao: r.descricao, valor: r.valor, valorVariavel: r.valorVariavel, categoriaId: r.categoriaId,
     contaId: r.contaId, formaPagamento: r.formaPagamento, frequencia: r.frequencia, intervalo: r.intervalo,
     dataInicio: r.dataInicio, dataFim: r.dataFim, observacao: r.observacao ?? '', aplicarAosPrevistos: true, motivo: '',
-    vencimento: r.vencimento, diaUtilNumero: r.diaUtilNumero ?? 5, dia: Number(r.dataInicio.slice(8, 10)), iniciaPeriodo: r.iniciaPeriodo,
+    vencimento: r.vencimento, diaUtilNumero: r.diaUtilNumero ?? 5, dia: Number(r.dataInicio.slice(8, 10)), iniciaPeriodo: r.iniciaPeriodo, pagoComRegraId: r.pagoComRegraId,
   })
   dialogo.value = true
 }
@@ -131,6 +137,7 @@ async function salvar() {
         diaUtilNumero: f.vencimento === 'DiaUtil' ? f.diaUtilNumero : null,
         dia: f.vencimento === 'DiaFixo' ? f.dia : null,
         iniciaPeriodo: f.tipo === 'Receita' ? f.iniciaPeriodo : null,
+        pagoComRegraId: f.tipo === 'Despesa' ? f.pagoComRegraId : null,
       })
       alterado('Conta atualizada')
     } else {
@@ -141,6 +148,7 @@ async function salvar() {
         vencimento: mensal.value ? f.vencimento : null,
         diaUtilNumero: f.vencimento === 'DiaUtil' ? f.diaUtilNumero : null,
         iniciaPeriodo: f.tipo === 'Receita' ? f.iniciaPeriodo : null,
+        pagoComRegraId: f.tipo === 'Despesa' ? f.pagoComRegraId : null,
       })
       alterado(f.tipo === 'Receita' ? 'Entrada cadastrada' : 'Conta cadastrada: os próximos vencimentos já aparecem')
     }
@@ -320,6 +328,8 @@ async function reativar(r: Regra) {
               type="info" variant="tonal" density="compact" class="text-body-2">
               As datas dos vencimentos ainda não pagos, a partir deste mês, serão recalculadas. O que já foi pago não muda.
             </v-alert>
+            <v-select v-if="f.tipo === 'Despesa' && pagamentos.length > 1" v-model="f.pagoComRegraId" :items="pagamentos" label="Pagar com"
+              data-testid="pagar-com" hint="Com qual pagamento você costuma pagar esta conta. Só muda a previsão." persistent-hint />
             <v-switch v-if="f.tipo === 'Receita'" v-model="f.iniciaPeriodo" color="primary" inset hide-details density="compact"
               label="É dia de pagamento (salário, adiantamento): divide a previsão em períodos" data-testid="inicia-periodo" />
           </template>

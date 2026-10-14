@@ -250,6 +250,7 @@ public static class Api
                     r.ContaId, Conta = r.Conta!.Nome, r.FormaPagamento, r.Valor, r.ValorVariavel, r.Parcelas,
                     r.Frequencia, r.Intervalo, r.DataInicio, r.DataFim, r.Ativa, r.Observacao,
                     Vencimento = r.Vencimento ?? RegraVencimento.DiaFixo, r.DiaUtilNumero,
+                    r.PagoComRegraId, PagoCom = regras.FirstOrDefault(x => x.Id == r.PagoComRegraId)?.Descricao,
                     IniciaPeriodo = r.Tipo == TipoLancamento.Receita && (r.IniciaPeriodo ?? PrevisaoService.EhSalario(r.Categoria.Nome)),
                     Realizadas = meus.Count(l => l.Status == StatusLancamento.Realizado),
                     Pendentes = meus.Count(l => l.Status == StatusLancamento.Previsto),

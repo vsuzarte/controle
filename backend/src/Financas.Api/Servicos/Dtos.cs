@@ -58,7 +58,8 @@ public record RegraDto(
     string? Observacao,
     RegraVencimento? Vencimento = null,
     int? DiaUtilNumero = null,
-    bool? IniciaPeriodo = null);
+    bool? IniciaPeriodo = null,
+    Guid? PagoComRegraId = null);
 
 public record EditarRegraDto(
     string Descricao,
@@ -76,7 +77,9 @@ public record EditarRegraDto(
     int? DiaUtilNumero = null,
     /// <summary>Com Vencimento = DiaFixo: novo dia do mês.</summary>
     int? Dia = null,
-    bool? IniciaPeriodo = null);
+    bool? IniciaPeriodo = null,
+    /// <summary>Contas: dia de pagamento que paga esta conta (nulo = automático). Sempre aplicado na edição.</summary>
+    Guid? PagoComRegraId = null);
 
 public record DesativarRegraDto(bool CancelarPrevistos, string? Motivo);
 
