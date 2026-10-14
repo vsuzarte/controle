@@ -81,7 +81,7 @@ async function agirAlerta(a: Alerta) {
           <v-spacer />
           <div class="text-right" data-testid="hoje">
             <div class="font-weight-bold text-capitalize">{{ dataBr(r.hoje, true) }}</div>
-            <div class="text-caption text-capitalize" style="opacity: 0.8">{{ nomeMes(r.hoje.slice(0, 7)) }}</div>
+            <div class="text-caption" style="opacity: 0.8">{{ nomeMes(r.hoje.slice(0, 7)) }}</div>
           </div>
         </div>
 

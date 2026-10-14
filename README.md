@@ -86,7 +86,10 @@ Rode antes de subir uma mudança. Tudo roda em Docker, sem instalar nada:
 - **Telas** (`e2e/testes`, Playwright): fora da rotina. Sobem uma cópia isolada do sistema
   (`docker-compose.e2e.yml`) com banco próprio, data fixa em 15/10/2026 e senha `e2e`. Podem estar desatualizados.
 
-Para **olhar o ambiente de testes** com dados de exemplo (http://localhost:8090, senha `e2e`):
+Para **demonstrar o sistema** com dados fictícios (http://localhost:8090, senha `e2e`, "hoje" fixo em 15/10/2026):
+~6 meses de histórico, dois cartões com limite, vale-refeição, salário + adiantamento, contas do mês, parcelas,
+juros, estorno, uma conta atrasada há dois meses, uma conta movida no quadro e um período salvo. Rodar de novo
+recomeça do zero. É um banco separado: o sistema de verdade (porta 8080) não é tocado.
 
 ```powershell
 docker compose -f docker-compose.e2e.yml up -d --build app
