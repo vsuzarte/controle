@@ -78,4 +78,6 @@ export interface Produto {
   ultimaLoja: string
   menorPreco: number
   lojaMenorPreco: string
+  /** "Nota": item de nota fiscal (onde = loja). "Lancamento": compra lançada à mão (onde = conta). */
+  origem: 'Nota' | 'Lancamento'
 }

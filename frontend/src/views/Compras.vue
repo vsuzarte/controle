@@ -52,7 +52,7 @@ const qtd = (p: Produto) => `${p.quantidade.toLocaleString('pt-BR', { maximumFra
         <v-btn value="24" size="small">2 anos</v-btn>
       </v-btn-toggle>
       <v-chip v-if="produtos.length" variant="tonal" color="error" label>
-        <span class="text-caption mr-2">{{ busca ? 'Gasto com a busca' : 'Gasto em notas' }}</span><span class="valor">{{ brl(total) }}</span>
+        <span class="text-caption mr-2">{{ busca ? 'Gasto com a busca' : 'Gasto em compras' }}</span><span class="valor">{{ brl(total) }}</span>
       </v-chip>
       <v-spacer />
       <v-btn color="primary" variant="flat" prepend-icon="mdi-qrcode-scan" @click="lerNotaFiscal()">Lançar nota</v-btn>
@@ -66,16 +66,24 @@ const qtd = (p: Produto) => `${p.quantidade.toLocaleString('pt-BR', { maximumFra
           <div class="d-flex align-center ga-3 px-4 py-3 cabeca">
             <v-avatar color="primary" variant="tonal" rounded="lg" size="34"><v-icon size="18">mdi-basket-outline</v-icon></v-avatar>
             <div class="font-weight-bold">Produtos</div>
-            <span class="text-caption text-medium-emphasis">{{ produtos.length }} · do que mais gastou para o que menos</span>
+            <span class="text-caption text-medium-emphasis">{{ produtos.length }} · notas e lançamentos, do que mais gastou para o que menos</span>
           </div>
           <div v-if="!produtos.length && !carregando" class="pa-8 text-center text-medium-emphasis">
-            <template v-if="busca">Nada com "{{ busca }}" nas notas desse período.</template>
-            <template v-else>Lance compras pela nota fiscal para ver aqui o que você compra e quanto gasta com cada coisa.</template>
+            <template v-if="busca">Nada com "{{ busca }}" nesse período.</template>
+            <template v-else>Suas compras aparecem aqui: as lançadas à mão e, com mais detalhe, as lançadas pela nota fiscal.</template>
           </div>
           <div v-for="p in produtos" :key="p.descricao" class="linha d-flex flex-wrap align-center ga-3 px-4 py-2" data-testid="produto">
             <div class="flex-grow-1" style="min-width: 200px">
-              <div class="font-weight-medium">{{ p.descricao }}</div>
-              <div class="text-caption text-medium-emphasis">
+              <div class="font-weight-medium d-flex align-center ga-1">
+                <v-icon size="14" class="text-medium-emphasis" :title="p.origem === 'Nota' ? 'Item de nota fiscal' : 'Lançado à mão'">
+                  {{ p.origem === 'Nota' ? 'mdi-receipt-text-outline' : 'mdi-pencil-outline' }}
+                </v-icon>
+                {{ p.descricao }}
+              </div>
+              <div v-if="p.origem === 'Lancamento'" class="text-caption text-medium-emphasis">
+                {{ p.vezes }}× · média {{ brl(p.precoMedio) }} · último {{ brl(p.ultimoPreco) }} em {{ dataBr(p.ultimaCompra).slice(0, 5) }} ({{ p.ultimaLoja }})
+              </div>
+              <div v-else class="text-caption text-medium-emphasis">
                 {{ p.vezes }}× · {{ qtd(p) }} · média {{ brl(p.precoMedio) }}/{{ p.unidade?.toLowerCase() ?? 'un' }}
                 · último {{ brl(p.ultimoPreco) }} em {{ dataBr(p.ultimaCompra).slice(0, 5) }} ({{ p.ultimaLoja }})
                 <template v-if="p.vezes > 1 && p.menorPreco < p.ultimoPreco"> · <span class="text-success">mais barato {{ brl(p.menorPreco) }} em {{ p.lojaMenorPreco }}</span></template>

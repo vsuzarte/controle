@@ -4,7 +4,8 @@ import { useDisplay } from 'vuetify'
 import { api } from '../api'
 import { alterado, contasAtivas, erro, estado, verCompra } from '../estado'
 import { brl, dataHoraBr } from '../formato'
-import { lerQrDaImagem } from '../qrcode'
+import { cameraDisponivel, lerQrDaImagem } from '../qrcode'
+import LeitorQrCamera from './LeitorQrCamera.vue'
 import type { LeituraNota } from '../tipos'
 
 /**
@@ -20,12 +21,21 @@ const loja = ref('')
 const contaId = ref<string | null>(null)
 const categorias = ref<Record<number, string>>({})
 const foto = ref<HTMLInputElement | null>(null)
+/** Câmera ao vivo aberta (abre sozinha ao entrar, quando a conexão permite). */
+const camera = ref(false)
 
 watch(() => estado.notaFiscal.aberto, (aberto) => {
   if (!aberto) return
   link.value = ''
   nota.value = null
+  camera.value = cameraDisponivel()
 })
+
+function lidoNaCamera(texto: string) {
+  camera.value = false
+  link.value = texto
+  ler(texto)
+}
 
 const opcoesCategoria = computed(() => estado.categorias.filter((c) => c.tipo === 'Despesa' && c.ativa)
   .map((c) => ({ title: c.nome, value: c.id, cor: c.cor, icone: c.icone })))
@@ -116,18 +126,20 @@ async function lancar() {
         <v-text-field v-model="link" placeholder="Cole o link do QR code da nota" density="compact" hide-details clearable
           prepend-inner-icon="mdi-link-variant" style="min-width: 240px" data-testid="link-nota" @keyup.enter="ler()" />
         <v-btn color="primary" variant="tonal" height="40" :loading="lendo && !!link" :disabled="!link" @click="ler()">Ler</v-btn>
-        <v-btn color="primary" variant="flat" height="40" prepend-icon="mdi-camera" :loading="lendo && !link" @click="foto?.click()">Foto do QR</v-btn>
+        <v-btn color="primary" variant="flat" height="40" prepend-icon="mdi-qrcode-scan" data-testid="abrir-camera" @click="camera = !camera">Câmera</v-btn>
+        <v-btn color="primary" variant="tonal" height="40" prepend-icon="mdi-camera" :loading="lendo && !link" @click="foto?.click()">Foto do QR</v-btn>
         <input ref="foto" type="file" accept="image/*" capture="environment" class="d-none" @change="aoTirarFoto" />
       </div>
+      <LeitorQrCamera v-if="camera" @lido="lidoNaCamera" @fechar="camera = false" />
       <v-divider />
 
-      <v-card-text v-if="!nota" class="text-body-2 text-medium-emphasis">
-        Tire uma foto do QR code da nota (ou cole o link que ele abre). Os itens aparecem aqui para você conferir antes de lançar.
+      <v-card-text v-if="!nota && !camera" class="text-body-2 text-medium-emphasis">
+        Aponte a câmera para o QR code da nota, tire uma foto dele ou cole o link que ele abre. Os itens aparecem aqui para você conferir antes de lançar.
         Por enquanto, só notas de SP.
       </v-card-text>
 
       <!-- ===== 2. Conferir ===== -->
-      <template v-else>
+      <template v-if="nota">
         <v-card-text class="pa-0">
           <v-alert v-if="nota.compraExistenteId" type="info" variant="tonal" density="compact" class="ma-3">
             Esta nota já foi lançada.

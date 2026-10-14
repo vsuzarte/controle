@@ -25,3 +25,28 @@ export async function lerQrDaImagem(arquivo: File): Promise<string | null> {
     bitmap.close()
   }
 }
+
+/** Câmera ao vivo só existe em conexão segura (https ou localhost); em http pela rede o navegador nem oferece. */
+export function cameraDisponivel() {
+  return window.isSecureContext && !!navigator.mediaDevices?.getUserMedia
+}
+
+/** Leitor para usar quadro a quadro no vídeo da câmera: o do navegador quando existe, senão o jsQR. */
+export async function criarDetectorQr(): Promise<(video: HTMLVideoElement) => Promise<string | null>> {
+  type Detector = { detect(i: CanvasImageSource): Promise<{ rawValue: string }[]> }
+  const Nativo = (window as unknown as { BarcodeDetector?: new (o: { formats: string[] }) => Detector }).BarcodeDetector
+  if (Nativo) {
+    const detector = new Nativo({ formats: ['qr_code'] })
+    return async (video) => (await detector.detect(video).catch(() => []))[0]?.rawValue ?? null
+  }
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!
+  return async (video) => {
+    const escala = Math.min(1, 960 / Math.max(video.videoWidth, video.videoHeight))
+    canvas.width = Math.round(video.videoWidth * escala)
+    canvas.height = Math.round(video.videoHeight * escala)
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+    const img = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    return jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' })?.data ?? null
+  }
+}

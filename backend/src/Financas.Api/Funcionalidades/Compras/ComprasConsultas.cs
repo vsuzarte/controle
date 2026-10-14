@@ -25,28 +25,49 @@ public class ComprasConsultas(AppDbContext db)
         return compras.Select(c => new CompraResumoView(c.Id, c.Loja, c.Emissao, c.Total, c.Itens, contas.GetValueOrDefault(c.ContaId, ""))).ToList();
     }
 
-    /// <summary>Produtos comprados no período, do que mais gastou para o que menos. Com busca, só os que contêm o texto.</summary>
+    /// <summary>
+    /// Tudo o que foi comprado no período, do que mais gastou para o que menos: itens das notas fiscais e também as
+    /// compras lançadas à mão (despesas avulsas, sem nota). Com busca, só o que contém o texto.
+    /// </summary>
     public async Task<List<ProdutoView>> Produtos(string? busca, DateOnly de, DateOnly ate)
     {
         var inicio = de.ToDateTime(TimeOnly.MinValue);
         var fim = ate.ToDateTime(TimeOnly.MaxValue);
-        var q = db.ItensCompra.Where(i => i.Compra!.Emissao >= inicio && i.Compra.Emissao <= fim);
-        if (!string.IsNullOrWhiteSpace(busca)) q = q.Where(i => EF.Functions.Like(i.Descricao, $"%{busca.Trim()}%"));
-        var itens = await q.Select(i => new { i.Descricao, i.Quantidade, i.Unidade, i.ValorPago, i.Compra!.Emissao, i.Compra.Loja }).ToListAsync();
+        var texto = string.IsNullOrWhiteSpace(busca) ? null : $"%{busca.Trim()}%";
+
+        var qItens = db.ItensCompra.Where(i => i.Compra!.Emissao >= inicio && i.Compra.Emissao <= fim);
+        if (texto is not null) qItens = qItens.Where(i => EF.Functions.Like(i.Descricao, texto));
+        var daNota = (await qItens.Select(i => new { i.Descricao, i.Quantidade, i.Unidade, i.ValorPago, i.Compra!.Emissao, i.Compra.Loja }).ToListAsync())
+            .Select(i => new LinhaCompra(i.Descricao, i.Quantidade, i.Unidade, i.ValorPago, i.Emissao, i.Loja, OrigemNota));
+
+        // Compras lançadas à mão: despesas realizadas avulsas (sem nota, sem conta do mês/parcela, sem estorno).
+        var qLanc = db.Lancamentos.Where(l => l.Tipo == TipoLancamento.Despesa && l.Status == StatusLancamento.Realizado
+            && l.CompraId == null && l.RegraId == null && l.EstornoDeId == null && l.Data >= de && l.Data <= ate);
+        if (texto is not null) qLanc = qLanc.Where(l => EF.Functions.Like(l.Descricao, texto));
+        var manuais = (await qLanc.Select(l => new { l.Descricao, l.Valor, l.Data, Conta = l.Conta!.Nome }).ToListAsync())
+            .Select(l => new LinhaCompra(l.Descricao.Trim(), 1, null, l.Valor, l.Data.ToDateTime(TimeOnly.MinValue), l.Conta, OrigemLancamento));
 
         decimal Unitario(decimal valor, decimal qtd) => qtd > 0 ? decimal.Round(valor / qtd, 2) : valor;
-        return itens.GroupBy(i => i.Descricao)
+        return daNota.Concat(manuais)
+            .GroupBy(c => (c.Origem, Chave: c.Descricao.ToUpperInvariant()))
             .Select(g =>
             {
-                var ultima = g.MaxBy(i => i.Emissao)!;
-                var maisBarata = g.MinBy(i => Unitario(i.ValorPago, i.Quantidade))!;
+                var ultima = g.MaxBy(i => i.Quando)!;
+                var maisBarata = g.MinBy(i => Unitario(i.Valor, i.Quantidade))!;
                 var quantidade = g.Sum(i => i.Quantidade);
-                return new ProdutoView(g.Key, g.Count(), quantidade, ultima.Unidade, g.Sum(i => i.ValorPago),
-                    Unitario(g.Sum(i => i.ValorPago), quantidade), Unitario(ultima.ValorPago, ultima.Quantidade),
-                    DateOnly.FromDateTime(ultima.Emissao), ultima.Loja, Unitario(maisBarata.ValorPago, maisBarata.Quantidade), maisBarata.Loja);
+                return new ProdutoView(ultima.Descricao, g.Count(), quantidade, ultima.Unidade, g.Sum(i => i.Valor),
+                    Unitario(g.Sum(i => i.Valor), quantidade), Unitario(ultima.Valor, ultima.Quantidade),
+                    DateOnly.FromDateTime(ultima.Quando), ultima.Onde, Unitario(maisBarata.Valor, maisBarata.Quantidade), maisBarata.Onde,
+                    g.Key.Origem);
             })
             .OrderByDescending(p => p.Total).ThenBy(p => p.Descricao)
-            .Take(200)
+            .Take(300)
             .ToList();
     }
+
+    public const string OrigemNota = "Nota";
+    public const string OrigemLancamento = "Lancamento";
+
+    /// <summary>Uma compra (item de nota ou lançamento à mão) no formato comum da busca.</summary>
+    private record LinhaCompra(string Descricao, decimal Quantidade, string? Unidade, decimal Valor, DateTime Quando, string Onde, string Origem);
 }

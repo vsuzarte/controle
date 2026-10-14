@@ -193,4 +193,24 @@ public class NotaFiscalTests
         Assert.Equal(bebidas.Id, lida.Itens[0].CategoriaId);   // mesma Coca (código de barras)
         Assert.Equal(a.Mercado.Id, lida.Itens[2].CategoriaId); // o resto continua Mercado
     }
+
+    [Fact]
+    public async Task Busca_tambem_acha_compras_lancadas_a_mao_mas_nao_contas_do_mes()
+    {
+        using var a = new Ambiente();
+        var (compras, consultas) = Servicos(a);
+        await compras.Importar(new ImportarCompraDto(Url, a.Banco.Id, null, []));
+        await a.Lancamentos.Criar(new NovoLancamentoDto(TipoLancamento.Despesa, "Coca no bar", 8.5m, D(2026, 10, 10),
+            a.Banco.Id, null, a.Lazer.Id, FormaPagamento.Pix, null, null, null, null));
+        await a.Lancamentos.Criar(new NovoLancamentoDto(TipoLancamento.Despesa, "coca no bar ", 9.5m, D(2026, 10, 11),
+            a.Banco.Id, null, a.Lazer.Id, FormaPagamento.Pix, null, null, null, null));
+        await a.Recorrente(TipoLancamento.Despesa, a.Energia, 100, D(2026, 10, 1)); // conta do mês não é compra
+
+        var achados = await consultas.Produtos("coca", D(2026, 1, 1), D(2026, 12, 31));
+        Assert.Equal(2, achados.Count);
+        var manual = achados.Single(p => p.Origem == ComprasConsultas.OrigemLancamento);
+        Assert.Equal((2, 18m, "Banco"), (manual.Vezes, manual.Total, manual.UltimaLoja)); // mesmo nome, maiúsculas/espaços à parte
+        Assert.Equal(ComprasConsultas.OrigemNota, achados.Single(p => p.Descricao.StartsWith("REFRIG")).Origem);
+        Assert.DoesNotContain(await consultas.Produtos(null, D(2026, 1, 1), D(2026, 12, 31)), p => p.Descricao == "Energia");
+    }
 }
