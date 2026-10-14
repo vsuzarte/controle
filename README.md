@@ -186,11 +186,23 @@ node e2e/dados-exemplo.mjs
 ## Desenvolvimento
 
 ```text
-backend/src/Financas.Api    API: Dominio/, Dados/ (EF Core + migrations), Servicos/ (regras), Endpoints/
-backend/tests/Financas.Tests Testes das regras de negócio (SQLite em memória com as migrations reais)
-frontend/src                 Vue 3 + Vuetify + Chart.js: views/ (telas), components/, estado.ts, api.ts
+backend/src/Financas.Api
+  Program.cs                 Só liga as peças (veja Infraestrutura/)
+  Dominio/                   Entidades, enums, calendário (dias úteis, feriados, faturas) e validações
+  Dados/                     AppDbContext, mapeamento de cada tabela, auditoria, backups e migrations
+  Funcionalidades/<Assunto>/ Uma pasta por assunto (Contas, Lancamentos, Regras, Cartoes, Previsao...):
+                             serviço(s) com as regras, DTOs/Views e os endpoints daquele assunto
+  Infraestrutura/            Registro dos serviços, rotas, tratamento de erros, inicialização e rotina diária
+backend/tests/Financas.Tests Um arquivo de testes por assunto (SQLite em memória com as migrations reais)
+frontend/src                 Vue 3 + Vuetify + Chart.js: views/ (telas), components/, tipos/ (por assunto),
+                             regras.ts (lógica pura, testada), estado.ts, api.ts
 e2e/                         Testes de tela (Playwright), dados de exemplo e capturas de tela
 ```
+
+**Convenções:** um tipo por arquivo; endpoints só recebem e repassam (a regra fica no serviço); consultas
+de tela ficam em classes `*Consultas` separadas das que alteram dados. Formatação no `.editorconfig`
+(`dotnet format whitespace backend/Financas.slnx` arruma o C#). As entidades ficam no namespace
+`Financas.Api.Dominio` mesmo estando em subpastas: as migrations dependem desse nome.
 
 Sem .NET/Node instalados (ou com a instalação quebrada), dá para usar só o Docker:
 

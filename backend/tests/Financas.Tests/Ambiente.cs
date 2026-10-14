@@ -1,15 +1,6 @@
-using Financas.Api.Dados;
-using Financas.Api.Dominio;
-using Financas.Api.Servicos;
 using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore;
 
 namespace Financas.Tests;
-
-public class RelogioFixo(DateOnly hoje) : IRelogio
-{
-    public DateOnly Hoje { get; set; } = hoje;
-}
 
 /// <summary>Banco SQLite em memória com as migrations reais (inclusive triggers) e os serviços prontos.</summary>
 public sealed class Ambiente : IDisposable
@@ -23,6 +14,8 @@ public sealed class Ambiente : IDisposable
     public PlanejamentoService Planejamento { get; }
     public ResumoService Resumo { get; }
     public PrevisaoService Previsao { get; }
+    public QuadroPrevisaoService Quadro { get; }
+    public ConfiguracaoPrevisaoService ConfigPrevisao { get; }
     public RelatorioService Relatorios { get; }
 
     public Conta Banco { get; }
@@ -40,12 +33,17 @@ public sealed class Ambiente : IDisposable
         Db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(_conexao).Options);
         Db.Database.Migrate();
 
-        Regras = new RegraService(Db, Relogio);
-        Lancamentos = new LancamentoService(Db, Relogio, Regras);
+        var saldos = new SaldoService(Db);
+        Regras = new RegraService(Db, Relogio, new GeradorDeOcorrencias(Db, Relogio));
+        Lancamentos = new LancamentoService(Db, Relogio, Regras, saldos);
         Cartoes = new CartaoService(Db, Relogio);
         Planejamento = new PlanejamentoService(Db, Relogio, Regras);
-        Previsao = new PrevisaoService(Db, Relogio, Regras, Cartoes);
-        Resumo = new ResumoService(Db, Relogio, Planejamento, Cartoes, Previsao);
+        var dias = new DiasDePagamento(Db);
+        var preferencias = new PreferenciasPrevisao(Db);
+        Previsao = new PrevisaoService(Db, Relogio, Regras, Cartoes, dias, preferencias);
+        Quadro = new QuadroPrevisaoService(Db, Cartoes);
+        ConfigPrevisao = new ConfiguracaoPrevisaoService(preferencias, dias, Previsao);
+        Resumo = new ResumoService(Db, Relogio, saldos, Planejamento, Cartoes, Previsao);
         Relatorios = new RelatorioService(Db);
 
         Banco = new Conta { Nome = "Banco", Tipo = TipoConta.Corrente, SaldoInicial = 1000m };
@@ -68,6 +66,11 @@ public sealed class Ambiente : IDisposable
         FormaPagamento forma = FormaPagamento.Boleto) =>
         Regras.Criar(new RegraDto(ModoRegra.Recorrente, tipo, cat.Nome, cat.Id, (conta ?? Banco).Id, forma, valor,
             false, null, Frequencia.Mensal, 1, inicio, null, null));
+
+    /// <summary>Entrada recorrente na categoria Salário (vira dia de pagamento da previsão).</summary>
+    public Task<Regra> Pagamento(string nome, decimal valor, DateOnly inicio, RegraVencimento? venc = null, int? diaUtil = null) =>
+        Regras.Criar(new RegraDto(ModoRegra.Recorrente, TipoLancamento.Receita, nome, Salario.Id, Banco.Id, FormaPagamento.Pix,
+            valor, false, null, Frequencia.Mensal, 1, inicio, null, null, venc, diaUtil));
 
     public static DateOnly D(int ano, int mes, int dia) => new(ano, mes, dia);
 

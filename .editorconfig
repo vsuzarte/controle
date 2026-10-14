@@ -1,0 +1,21 @@
+# Padrão de formatação do projeto (respeitado pelo VS Code, Visual Studio, Rider e `dotnet format`).
+root = true
+
+[*]
+charset = utf-8
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.cs]
+indent_size = 4
+csharp_new_line_before_open_brace = all
+csharp_prefer_braces = when_multiline:suggestion
+dotnet_sort_system_directives_first = true
+
+[*.md]
+trim_trailing_whitespace = false
+
+[**/Migrations/**.cs]
+generated_code = true

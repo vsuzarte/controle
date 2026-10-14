@@ -1,0 +1,10 @@
+// Tipos das respostas da API, separados por assunto. Importe sempre de '../tipos'.
+export * from './enums'
+export * from './cadastros'
+export * from './lancamentos'
+export * from './cartoes'
+export * from './planejamento'
+export * from './resumo'
+export * from './previsao'
+export * from './relatorios'
+export * from './opcoes'

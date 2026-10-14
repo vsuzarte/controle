@@ -1,0 +1,12 @@
+global using Financas.Api.Dados;
+global using Financas.Api.Dominio;
+global using Financas.Api.Funcionalidades.Cartoes;
+global using Financas.Api.Funcionalidades.Contas;
+global using Financas.Api.Funcionalidades.Lancamentos;
+global using Financas.Api.Funcionalidades.Planejamento;
+global using Financas.Api.Funcionalidades.Previsao;
+global using Financas.Api.Funcionalidades.Regras;
+global using Financas.Api.Funcionalidades.Relatorios;
+global using Financas.Api.Funcionalidades.Resumo;
+global using Microsoft.EntityFrameworkCore;
+global using static Financas.Tests.Ambiente;
