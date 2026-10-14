@@ -151,27 +151,6 @@ async function agir(i: ItemPrevisao) {
 
 <template>
   <div class="pagina">
-    <div class="cabecalho">
-      <div>
-        <div class="titulo-pagina">Previsão</div>
-        <div class="text-body-2 text-medium-emphasis">
-          <template v-if="p?.personalizado">Período escolhido por você, dividido pelos pagamentos dentro dele.</template>
-          <template v-else-if="p?.porSalario">Cada pagamento cobre as contas até o pagamento seguinte.</template>
-          <template v-else>Mês inteiro (marque seu salário como "dia de pagamento" em Contas do mês para dividir por pagamentos).</template>
-        </div>
-      </div>
-      <v-spacer />
-      <div v-if="!salvo" class="d-flex align-center ga-1">
-        <v-btn icon="mdi-chevron-left" variant="text" aria-label="Período anterior" @click="anterior" />
-        <v-chip v-if="p" variant="tonal" :color="ehHoje ? 'primary' : undefined" data-testid="ciclo">
-          {{ dataBr(p.inicio) }} a {{ dataBr(p.fim) }}
-        </v-chip>
-        <v-btn icon="mdi-chevron-right" variant="text" aria-label="Próximo período" @click="proximo" />
-        <v-btn v-if="data" variant="text" size="small" @click="data = null">Hoje</v-btn>
-      </div>
-      <v-chip v-else-if="p" variant="tonal" color="primary" data-testid="ciclo">{{ dataBr(p.inicio) }} a {{ dataBr(p.fim) }}</v-chip>
-    </div>
-
     <!-- ===== Qual período ver ===== -->
     <div class="d-flex align-center flex-wrap ga-2 mb-4">
       <v-chip-group v-model="selecao" mandatory selected-class="text-primary" aria-label="Período da previsão">
@@ -183,17 +162,30 @@ async function agir(i: ItemPrevisao) {
       </v-chip-group>
       <v-btn variant="text" size="small" prepend-icon="mdi-plus" @click="novoPeriodo">Período</v-btn>
       <v-spacer />
+      <div v-if="!salvo" class="d-flex align-center">
+        <v-btn icon="mdi-chevron-left" variant="text" size="small" aria-label="Período anterior" @click="anterior" />
+        <v-chip v-if="p" variant="tonal" :color="ehHoje ? 'primary' : undefined" data-testid="ciclo">
+          {{ dataBr(p.inicio) }} a {{ dataBr(p.fim) }}
+        </v-chip>
+        <v-btn icon="mdi-chevron-right" variant="text" size="small" aria-label="Próximo período" @click="proximo" />
+        <v-btn v-if="data" variant="text" size="small" @click="data = null">Hoje</v-btn>
+      </div>
+      <v-chip v-else-if="p" variant="tonal" color="primary" data-testid="ciclo">{{ dataBr(p.inicio) }} a {{ dataBr(p.fim) }}</v-chip>
       <v-btn-toggle v-model="modo" mandatory density="compact" variant="outlined" divided rounded="lg" aria-label="Ver como">
-        <v-btn value="quadro" size="small" prepend-icon="mdi-view-column-outline">Quadro</v-btn>
+        <v-btn value="quadro" size="small" prepend-icon="mdi-view-column-outline" title="Arraste uma conta ou fatura para pagar com o dinheiro de outro pagamento (só aquela; no celular, segure o card ou use o menu ...)">Quadro</v-btn>
         <v-btn value="lista" size="small" prepend-icon="mdi-format-list-bulleted">Lista</v-btn>
       </v-btn-toggle>
       <v-btn variant="tonal" size="small" prepend-icon="mdi-tune-variant" @click="abrirConfig">Configurar</v-btn>
     </div>
 
+    <div v-if="p && !p.porSalario && !p.personalizado" class="text-caption text-medium-emphasis mb-3">
+      Mostrando o mês inteiro. Marque seu salário como "dia de pagamento" em Contas do mês para dividir por pagamentos.
+    </div>
+
     <div v-if="!p" class="d-flex justify-center pa-16"><v-progress-circular indeterminate color="primary" /></div>
     <template v-else>
       <!-- ===== Resumo do ciclo ===== -->
-      <v-card class="destaque pa-6 mb-4" rounded="xl" data-testid="resumo-ciclo">
+      <v-card class="destaque pa-5 mb-4" rounded="xl" data-testid="resumo-ciclo">
         <v-row dense>
           <v-col cols="6" sm="3">
             <div class="rotulo" style="opacity: 0.8">Começa com</div>
@@ -223,10 +215,6 @@ async function agir(i: ItemPrevisao) {
 
       <!-- ===== Quadro ===== -->
       <template v-if="modo === 'quadro'">
-        <div class="text-caption text-medium-emphasis mb-2">
-          Arraste uma conta ou fatura para pagar com o dinheiro de outro pagamento (vale só para ela; a conta do mês não muda).
-          No celular, segure o card antes de arrastar, ou use o menu "…".
-        </div>
         <QuadroPrevisao :periodos="abertos" @agir="agir" />
       </template>
 

@@ -22,7 +22,7 @@ onMounted(carregar)
 watch(() => estado.versao, carregar)
 
 const grupos = computed(() => {
-  const ativas = regras.value.filter((r) => r.ativa)
+  const ativas = regras.value.filter((r) => r.ativa).sort((a, b) => diaDe(a) - diaDe(b) || a.descricao.localeCompare(b.descricao))
   return [
     { titulo: 'Contas', icone: 'mdi-receipt-text-outline', cor: 'error', itens: ativas.filter((r) => r.tipo === 'Despesa' && r.modo === 'Recorrente') },
     { titulo: 'Entradas', icone: 'mdi-cash-plus', cor: 'success', itens: ativas.filter((r) => r.tipo === 'Receita') },
@@ -192,70 +192,65 @@ async function reativar(r: Regra) {
 
 <template>
   <div class="pagina">
-    <div class="cabecalho">
-      <div>
-        <div class="titulo-pagina">Contas do mês</div>
-        <div class="text-body-2 text-medium-emphasis">O que se repete: aluguel, luz, internet, salário…</div>
-      </div>
+    <!-- Totais na mesma linha dos botões: sobra tela para os cards -->
+    <div class="d-flex flex-wrap align-center ga-3 mb-4">
+      <v-card class="px-4 py-2 d-flex align-center ga-3" variant="tonal" color="error">
+        <v-icon>mdi-receipt-text-outline</v-icon>
+        <div><div class="rotulo">Contas por mês</div><div class="font-weight-bold" data-testid="total-contas">{{ brl(totalMensal.contas) }}</div></div>
+      </v-card>
+      <v-card class="px-4 py-2 d-flex align-center ga-3" variant="tonal" color="success">
+        <v-icon>mdi-cash-plus</v-icon>
+        <div><div class="rotulo">Entradas por mês</div><div class="font-weight-bold">{{ brl(totalMensal.entradas) }}</div></div>
+      </v-card>
       <v-spacer />
       <v-btn variant="tonal" color="success" prepend-icon="mdi-plus" @click="nova('Receita')">Entrada</v-btn>
       <v-btn color="primary" variant="flat" prepend-icon="mdi-plus" @click="nova('Despesa')">Conta</v-btn>
     </div>
 
-    <v-row dense class="mb-3">
-      <v-col cols="6">
-        <v-card class="pa-4 d-flex align-center ga-3">
-          <v-avatar color="error" variant="tonal" rounded="lg"><v-icon>mdi-receipt-text-outline</v-icon></v-avatar>
-          <div><div class="rotulo">Contas por mês</div><div class="medio" data-testid="total-contas">{{ brl(totalMensal.contas) }}</div></div>
-        </v-card>
-      </v-col>
-      <v-col cols="6">
-        <v-card class="pa-4 d-flex align-center ga-3">
-          <v-avatar color="success" variant="tonal" rounded="lg"><v-icon>mdi-cash-plus</v-icon></v-avatar>
-          <div><div class="rotulo">Entradas por mês</div><div class="medio">{{ brl(totalMensal.entradas) }}</div></div>
-        </v-card>
-      </v-col>
-    </v-row>
-
     <template v-for="g in grupos" :key="g.titulo">
-      <v-card v-if="g.itens.length" class="mb-4">
-        <v-card-item><v-card-title class="font-weight-bold">{{ g.titulo }}</v-card-title></v-card-item>
-        <v-list class="pt-0 px-2">
-          <v-list-item v-for="r in g.itens" :key="r.id" rounded="lg" class="py-2" data-testid="conta-do-mes" :aria-label="r.descricao" @click="editar(r)">
-            <template #prepend>
-              <v-avatar :color="g.cor" variant="tonal" rounded="lg" size="48" class="flex-column">
-                <span class="text-caption" style="line-height: 1; opacity: 0.8">dia</span>
-                <span class="font-weight-bold" style="line-height: 1.1; font-size: 1.05rem">{{ diaDe(r) }}</span>
-              </v-avatar>
-            </template>
-            <v-list-item-title class="font-weight-bold d-flex align-center ga-2">
-              {{ r.descricao }}
-              <v-chip v-if="r.atrasadas" size="x-small" color="error" variant="tonal" label>{{ r.atrasadas }} atrasada(s)</v-chip>
-            </v-list-item-title>
-            <v-list-item-subtitle>{{ detalhe(r) }}</v-list-item-subtitle>
-            <v-list-item-subtitle v-if="r.proximaData">Próxima: {{ dataBr(r.proximaData) }}</v-list-item-subtitle>
-            <template #append>
-              <span class="valor mr-1">{{ brl(r.modo === 'Parcelado' ? r.proximoValor ?? 0 : r.valor) }}</span>
-              <v-menu>
-                <template #activator="{ props }">
-                  <v-btn v-bind="props" icon="mdi-dots-vertical" variant="text" size="small" :aria-label="'Ações de ' + r.descricao" @click.stop />
-                </template>
-                <v-list density="compact" rounded="lg">
-                  <v-list-item prepend-icon="mdi-pencil-outline" title="Editar" @click="editar(r)" />
-                  <v-list-item v-if="r.modo === 'Parcelado'" prepend-icon="mdi-calendar-arrow-right" title="Mover parcelas" @click="moverParcelas(r.id, r.descricao)" />
-                  <v-list-item prepend-icon="mdi-history" title="Histórico" @click="verHistorico(r.id, r.descricao)" />
-                  <v-list-item
-                    prepend-icon="mdi-stop-circle-outline"
-                    :title="r.modo === 'Parcelado' ? 'Cancelar parcelas futuras' : 'Encerrar'"
-                    base-color="error"
-                    @click="abrirDesativar(r)"
-                  />
-                </v-list>
-              </v-menu>
-            </template>
-          </v-list-item>
-        </v-list>
-      </v-card>
+      <div v-if="g.itens.length" class="mb-5">
+        <div class="rotulo mb-2">{{ g.titulo }} · {{ g.itens.length }}</div>
+        <v-row dense>
+          <v-col v-for="r in g.itens" :key="r.id" cols="12" sm="6" lg="4" xl="3">
+            <v-card class="h-100 d-flex flex-column" data-testid="conta-do-mes" :aria-label="r.descricao" @click="editar(r)">
+              <div class="d-flex align-start ga-3 pa-4 pb-2">
+                <v-avatar :color="g.cor" variant="tonal" rounded="lg" size="44" class="flex-column">
+                  <span class="text-caption" style="line-height: 1; opacity: 0.8">dia</span>
+                  <span class="font-weight-bold" style="line-height: 1.1; font-size: 1rem">{{ diaDe(r) }}</span>
+                </v-avatar>
+                <div class="flex-grow-1" style="min-width: 0">
+                  <div class="font-weight-bold text-truncate">{{ r.descricao }}</div>
+                  <div class="text-caption text-medium-emphasis detalhe">{{ detalhe(r) }}</div>
+                </div>
+                <v-menu>
+                  <template #activator="{ props }">
+                    <v-btn v-bind="props" icon="mdi-dots-vertical" variant="text" size="small" class="mt-n1 mr-n2" :aria-label="'Ações de ' + r.descricao" @click.stop />
+                  </template>
+                  <v-list density="compact" rounded="lg">
+                    <v-list-item prepend-icon="mdi-pencil-outline" title="Editar" @click="editar(r)" />
+                    <v-list-item v-if="r.modo === 'Parcelado'" prepend-icon="mdi-calendar-arrow-right" title="Mover parcelas" @click="moverParcelas(r.id, r.descricao)" />
+                    <v-list-item prepend-icon="mdi-history" title="Histórico" @click="verHistorico(r.id, r.descricao)" />
+                    <v-list-item
+                      prepend-icon="mdi-stop-circle-outline"
+                      :title="r.modo === 'Parcelado' ? 'Cancelar parcelas futuras' : 'Encerrar'"
+                      base-color="error"
+                      @click="abrirDesativar(r)"
+                    />
+                  </v-list>
+                </v-menu>
+              </div>
+              <div class="d-flex align-end px-4 pb-4 mt-auto">
+                <div class="text-caption text-medium-emphasis">
+                  <template v-if="r.proximaData">Próxima: {{ dataBr(r.proximaData) }}</template>
+                  <v-chip v-if="r.atrasadas" size="x-small" color="error" variant="tonal" label class="ml-1">{{ r.atrasadas }} atrasada(s)</v-chip>
+                </div>
+                <v-spacer />
+                <span class="medio" :class="g.titulo === 'Entradas' ? 'text-success' : ''">{{ brl(r.modo === 'Parcelado' ? r.proximoValor ?? 0 : r.valor) }}</span>
+              </div>
+            </v-card>
+          </v-col>
+        </v-row>
+      </div>
     </template>
 
     <v-card v-if="!regras.length">
@@ -385,3 +380,7 @@ async function reativar(r: Regra) {
     </v-dialog>
   </div>
 </template>
+
+<style scoped>
+.detalhe { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+</style>
