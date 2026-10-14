@@ -99,9 +99,11 @@ const opcoesCategorias = computed(() => estado.categorias.map((c) => ({ title: `
 <template>
   <div class="pagina">
     <!-- ===== Mês, totais e ferramentas numa linha só ===== -->
-    <div class="d-flex flex-wrap align-center ga-2 mb-3">
+    <div class="barra d-flex align-center ga-2 mb-3">
       <SeletorMes v-model="estado.mes" />
-      <v-chip v-for="t in [
+      <!-- Meio da barra: totais do mês ou, durante a busca, período e gasto. Ocupa o que sobra e nunca quebra a linha. -->
+      <div class="meio-barra d-flex align-center ga-2">
+      <v-chip v-for="t in filtros.busca ? [] : [
         { rotulo: 'Entrou', valor: totais.entradas, cor: 'success' },
         { rotulo: 'Gastei', valor: totais.saidas, cor: 'error' },
         { rotulo: 'A pagar', valor: totais.previsto, cor: 'warning' },
@@ -109,7 +111,6 @@ const opcoesCategorias = computed(() => estado.categorias.map((c) => ({ title: `
       ]" :key="t.rotulo" :color="t.cor" variant="tonal" label>
         <span class="text-caption mr-2">{{ t.rotulo }}</span><span class="valor">{{ brl(t.valor) }}</span>
       </v-chip>
-      <v-spacer />
       <template v-if="filtros.busca">
         <v-btn-toggle v-model="periodoBusca" mandatory density="compact" variant="outlined" divided rounded="lg" aria-label="Buscar em">
           <v-btn value="mes" size="small">Mês</v-btn>
@@ -118,8 +119,9 @@ const opcoesCategorias = computed(() => estado.categorias.map((c) => ({ title: `
         </v-btn-toggle>
         <v-chip color="primary" variant="tonal" label data-testid="gasto-busca"><span class="text-caption mr-2">Gasto na busca</span><span class="valor">{{ brl(gastoNaBusca) }}</span></v-chip>
       </template>
+      </div>
       <v-text-field v-model="filtros.busca" prepend-inner-icon="mdi-magnify" placeholder="Buscar (também itens das notas)" density="compact" clearable hide-details
-        aria-label="Buscar" style="min-width: 180px; max-width: 280px" />
+        aria-label="Buscar" style="flex: 0 0 240px" />
       <v-btn variant="tonal" icon="mdi-qrcode-scan" rounded="lg" size="40" color="primary" title="Lançar pela nota fiscal (QR code)" aria-label="Lançar pela nota fiscal" @click="lerNotaFiscal()" />
       <v-menu>
         <template #activator="{ props }">
@@ -188,6 +190,10 @@ const opcoesCategorias = computed(() => estado.categorias.map((c) => ({ title: `
 </template>
 
 <style scoped>
+.barra { flex-wrap: nowrap; }
+.meio-barra { flex: 1 1 0; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.meio-barra > * { flex-shrink: 0; }
+@media (max-width: 700px) { .barra { flex-wrap: wrap; } .meio-barra { order: 9; flex-basis: 100%; } }
 /* Separação nítida: faixa do dia, linhas alternadas e um traço entre elas, para o olho não se perder do nome até o valor. */
 .cabeca-secao { border-bottom: 1px solid rgba(var(--v-border-color), 0.16); }
 .dia { background: rgba(var(--v-theme-on-surface), 0.06); border-top: 1px solid rgba(var(--v-border-color), 0.12); }
