@@ -28,7 +28,9 @@ export const cartoes = computed(() => contasAtivas.value.filter((c) => c.tipo ==
 
 export async function carregarCadastros() {
   const [contas, categorias] = await Promise.all([api.get<Conta[]>('/contas'), api.get<Categoria[]>('/categorias')])
-  estado.contas = contas
+  // Bancos primeiro, depois dinheiro, cartões e vale (o servidor ordena pelo nome do tipo).
+  const ordem: Record<string, number> = { Corrente: 0, CarteiraDigital: 1, Poupanca: 2, Dinheiro: 3, CartaoCredito: 4, Beneficio: 5 }
+  estado.contas = [...contas].sort((a, b) => (ordem[a.tipo] ?? 9) - (ordem[b.tipo] ?? 9) || a.nome.localeCompare(b.nome))
   estado.categorias = categorias
 }
 

@@ -2,7 +2,7 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useDisplay } from 'vuetify'
 import { api } from '../api'
-import { alterado, confirmarLancamento, contasAtivas, erro, estado } from '../estado'
+import { alterado, confirmarLancamento, contasAtivas, contasPagadoras, erro, estado } from '../estado'
 import { brl, dataBr, hojeIso, nomeMes, somarDias, somarMeses } from '../formato'
 import { FORMAS, TIPOS_CONTA, type FormaPagamento, type Lancamento, type StatusLancamento, type TipoLancamento } from '../tipos'
 import CampoValor from './CampoValor.vue'
@@ -132,7 +132,7 @@ function preencher() {
   Object.assign(f, {
     tipo, valor: null, descricao: '', parcelas: 1, observacao: '', faturaMes: null, motivo: '', pago: true,
     data: hojeIso(), contaDestinoId: null, complementoId: null,
-    contaId: contasAtivas.value.some((c) => c.id === contaMem) ? contaMem : contasAtivas.value.find((c) => c.tipo !== 'CartaoCredito')?.id ?? null,
+    contaId: contasAtivas.value.some((c) => c.id === contaMem) ? contaMem : contasPagadoras.value[0]?.id ?? null,
     categoriaId: estado.categorias.some((c) => c.id === catMem && c.ativa) ? catMem : null,
     formaPagamento: (memoria('forma.' + tipo) as FormaPagamento) ?? 'Pix',
   })
@@ -146,7 +146,7 @@ watch(() => f.tipo, (tipo, antigo) => {
   if (editando.value || tipo === antigo) return
   const cat = memoria('categoria.' + tipo)
   f.categoriaId = estado.categorias.some((c) => c.id === cat && c.tipo === (tipo === 'Receita' ? 'Receita' : 'Despesa')) ? cat : null
-  if (tipo !== 'Despesa' && ehCartao.value) f.contaId = contasAtivas.value.find((c) => c.tipo !== 'CartaoCredito')?.id ?? null
+  if (tipo !== 'Despesa' && ehCartao.value) f.contaId = contasPagadoras.value[0]?.id ?? null
   if (tipo !== 'Despesa') f.parcelas = 1
   if (tipo === 'Transferencia' && ehVale.value) f.contaId = contasAtivas.value.find((c) => c.tipo !== 'CartaoCredito' && c.tipo !== 'Beneficio')?.id ?? null
 })

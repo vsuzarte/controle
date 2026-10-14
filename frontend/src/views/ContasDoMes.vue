@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useDisplay } from 'vuetify'
 import { api } from '../api'
-import { alterado, contasAtivas, erro, estado, verHistorico } from '../estado'
+import { alterado, contasAtivas, contasPagadoras, erro, estado, verHistorico } from '../estado'
 import { brl, dataBr, hojeIso } from '../formato'
 import { FORMAS, VENCIMENTOS, type FormaPagamento, type Frequencia, type Regra, type RegraVencimento, type TipoLancamento } from '../tipos'
 import CampoValor from '../components/CampoValor.vue'
@@ -106,7 +106,7 @@ function nova(tipo: TipoLancamento) {
   editandoId.value = null
   Object.assign(f, {
     tipo, descricao: '', valor: null, valorVariavel: false, categoriaId: null,
-    contaId: contasAtivas.value.find((c) => c.tipo !== 'CartaoCredito')?.id ?? null,
+    contaId: contasPagadoras.value[0]?.id ?? null,
     formaPagamento: tipo === 'Receita' ? 'Transferencia' : 'Boleto', frequencia: 'Mensal', intervalo: 1,
     dataInicio: hojeIso(), dataFim: null, observacao: '', aplicarAosPrevistos: true, motivo: '',
     vencimento: 'DiaFixo', diaUtilNumero: 5, dia: null, iniciaPeriodo: false, pagoComRegraId: null,
