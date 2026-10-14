@@ -5,6 +5,7 @@ import { useDisplay } from 'vuetify'
 import { api, sessao } from './api'
 import { carregarCadastros, erro, estado, novoLancamento } from './estado'
 import { definirHoje, mesIso } from './formato'
+import { TEMAS, preferenciaTema, proximoTema } from './tema'
 import LancamentoForm from './components/LancamentoForm.vue'
 import ConfirmarDialog from './components/ConfirmarDialog.vue'
 import HistoricoDialog from './components/HistoricoDialog.vue'
@@ -17,6 +18,9 @@ const senha = ref('')
 const entrando = ref(false)
 const erroLogin = ref('')
 const mais = ref(false)
+/** Menu lateral só com ícones (quem já conhece o sistema). Lembrado neste aparelho. */
+const recolhido = ref((() => { try { return localStorage.getItem('fin.menu.recolhido') === '1' } catch { return false } })())
+watch(recolhido, (v) => { try { localStorage.setItem('fin.menu.recolhido', v ? '1' : '0') } catch { /* sem storage */ } })
 
 const menu = [
   { to: '/', titulo: 'Início', icone: 'mdi-home-variant-outline', iconeAtivo: 'mdi-home-variant' },
@@ -98,29 +102,54 @@ onMounted(() => {
 
     <template v-else>
       <!-- ===== Computador: barra lateral ===== -->
-      <v-navigation-drawer v-if="mdAndUp" permanent width="256" color="background" border="0">
-        <v-list-item class="py-6 px-5">
+      <v-navigation-drawer v-if="mdAndUp" permanent :rail="recolhido" width="240" rail-width="76" color="background" border="0">
+        <v-list-item class="py-6" :class="recolhido ? 'px-4' : 'px-5'">
           <template #prepend>
             <v-avatar class="destaque" rounded="lg" size="40"><v-icon color="white">mdi-chart-timeline-variant-shimmer</v-icon></v-avatar>
           </template>
           <v-list-item-title class="text-h6 font-weight-bold">Finanças</v-list-item-title>
         </v-list-item>
         <v-list nav color="primary" class="px-3" bg-color="transparent">
-          <v-list-item
-            v-for="m in menu"
-            :key="m.to"
-            :to="m.to"
-            :prepend-icon="ativo(m.to) ? m.iconeAtivo : m.icone"
-            :title="m.titulo"
-            rounded="lg"
-            exact
-            class="mb-1"
-          />
+          <v-tooltip v-for="m in menu" :key="m.to" :text="m.titulo" location="end" :disabled="!recolhido">
+            <template #activator="{ props: dica }">
+              <v-list-item
+                v-bind="dica"
+                :to="m.to"
+                :prepend-icon="ativo(m.to) ? m.iconeAtivo : m.icone"
+                :title="m.titulo"
+                :aria-label="m.titulo"
+                rounded="lg"
+                exact
+                class="mb-1"
+              />
+            </template>
+          </v-tooltip>
         </v-list>
         <template #append>
-          <div class="pa-4">
-            <v-btn block color="primary" variant="flat" size="x-large" prepend-icon="mdi-plus" @click="novoLancamento()">Lançar</v-btn>
-            <div class="text-caption text-center text-medium-emphasis mt-2">ou aperte <v-chip size="x-small" label>N</v-chip></div>
+          <div :class="recolhido ? 'pa-3 d-flex flex-column align-center ga-2' : 'pa-4'">
+            <v-tooltip v-if="recolhido" text="Lançar (N)" location="end">
+              <template #activator="{ props: dica }">
+                <v-btn v-bind="dica" icon="mdi-plus" color="primary" variant="flat" aria-label="Lançar" @click="novoLancamento()" />
+              </template>
+            </v-tooltip>
+            <template v-else>
+              <v-btn block color="primary" variant="flat" size="x-large" prepend-icon="mdi-plus" @click="novoLancamento()">Lançar</v-btn>
+              <div class="text-caption text-center text-medium-emphasis mt-2">ou aperte <v-chip size="x-small" label>N</v-chip></div>
+            </template>
+            <div :class="recolhido ? 'd-flex flex-column align-center ga-1' : 'd-flex justify-center ga-2 mt-2'">
+              <v-tooltip :text="TEMAS[preferenciaTema].titulo + ' (clique para trocar)'" location="end">
+                <template #activator="{ props: dica }">
+                  <v-btn v-bind="dica" :icon="TEMAS[preferenciaTema].icone" variant="text" size="small"
+                    :aria-label="TEMAS[preferenciaTema].titulo" data-testid="trocar-tema" @click="proximoTema" />
+                </template>
+              </v-tooltip>
+              <v-tooltip :text="recolhido ? 'Abrir menu' : 'Recolher menu'" location="end">
+                <template #activator="{ props: dica }">
+                  <v-btn v-bind="dica" :icon="recolhido ? 'mdi-chevron-double-right' : 'mdi-chevron-double-left'" variant="text" size="small"
+                    :aria-label="recolhido ? 'Abrir menu' : 'Recolher menu'" @click="recolhido = !recolhido" />
+                </template>
+              </v-tooltip>
+            </div>
           </div>
         </template>
       </v-navigation-drawer>
@@ -151,6 +180,9 @@ onMounted(() => {
       <v-bottom-sheet v-model="mais">
         <v-card rounded="t-xl" class="pb-6">
           <v-list nav class="pa-3">
+            <v-list-item :title="TEMAS[preferenciaTema].titulo" subtitle="Toque para trocar (automático, claro, escuro)" rounded="lg" @click="proximoTema">
+              <template #prepend><v-avatar color="secondary" variant="tonal" rounded="lg"><v-icon>{{ TEMAS[preferenciaTema].icone }}</v-icon></v-avatar></template>
+            </v-list-item>
             <v-list-item v-for="m in menuMais" :key="m.to" :to="m.to" :title="m.titulo" rounded="lg" @click="mais = false">
               <template #prepend><v-avatar color="primary" variant="tonal" rounded="lg"><v-icon>{{ m.iconeAtivo }}</v-icon></v-avatar></template>
             </v-list-item>

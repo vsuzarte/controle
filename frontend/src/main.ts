@@ -7,6 +7,7 @@ import '@mdi/font/css/materialdesignicons.css'
 import 'vuetify/styles'
 import './estilo.css'
 import App from './App.vue'
+import { aplicarTema, temaEfetivo } from './tema'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -24,12 +25,11 @@ const router = createRouter({
   ],
 })
 
-const escuro = window.matchMedia('(prefers-color-scheme: dark)').matches
 
 const vuetify = createVuetify({
   locale: { locale: 'pt', messages: { pt } },
   theme: {
-    defaultTheme: escuro ? 'escuro' : 'claro',
+    defaultTheme: temaEfetivo(),
     themes: {
       claro: {
         dark: false,
@@ -62,8 +62,6 @@ const vuetify = createVuetify({
   },
 })
 
-window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-  vuetify.theme.global.name.value = e.matches ? 'escuro' : 'claro'
-})
+aplicarTema((nome) => { vuetify.theme.global.name.value = nome })
 
 createApp(App).use(router).use(vuetify).mount('#app')

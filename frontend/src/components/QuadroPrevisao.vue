@@ -160,7 +160,7 @@ function aoMudar(evento: { added?: { element: ItemPrevisao } }, coluna: PeriodoP
 
 <style scoped>
 .quadro { display: flex; gap: 16px; overflow-x: auto; padding-bottom: 8px; scroll-snap-type: x mandatory; }
-.coluna { flex: 1 0 300px; max-width: 420px; display: flex; flex-direction: column; scroll-snap-align: start; }
+.coluna { flex: 1 1 320px; min-width: 300px; display: flex; flex-direction: column; scroll-snap-align: start; }
 .coluna--atual { outline: 2px solid rgb(var(--v-theme-primary)); outline-offset: -2px; }
 .cards { min-height: 96px; flex-grow: 1; }
 .card { border: 1px solid var(--borda); border-left-width: 4px; cursor: grab; user-select: none; }

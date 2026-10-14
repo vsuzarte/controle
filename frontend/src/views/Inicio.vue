@@ -1,14 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { api } from '../api'
-import { confirmarLancamento, erro, estado, novoLancamento, pagarFatura } from '../estado'
+import { confirmarLancamento, erro, estado, pagarFatura } from '../estado'
 import { brl, dataBr, nomeMes, somarDias } from '../formato'
 import type { Alerta, Lancamento, Resumo } from '../tipos'
 import { separarVencimentos } from '../regras'
 import Rosca from '../components/Rosca.vue'
 
-const router = useRouter()
 const r = ref<Resumo | null>(null)
 const verContas = ref(false)
 const verResto = ref(false)
@@ -29,12 +27,6 @@ const gastos = computed(() =>
 )
 const fatias = computed(() => gastos.value.map((g) => ({ nome: g.categoria, valor: g.gasto, cor: g.corFinal })))
 
-const acoes = [
-  { titulo: 'Despesa', icone: 'mdi-arrow-down', cor: 'error', fazer: () => novoLancamento('Despesa') },
-  { titulo: 'Receita', icone: 'mdi-arrow-up', cor: 'success', fazer: () => novoLancamento('Receita') },
-  { titulo: 'Transferir', icone: 'mdi-swap-horizontal', cor: 'secondary', fazer: () => novoLancamento('Transferencia') },
-  { titulo: 'Previsão', icone: 'mdi-calendar-clock', cor: 'info', fazer: () => router.push('/previsao') },
-]
 
 // ----- Previsão: período de hoje e "livre até o próximo pagamento" -----
 const previsao = computed(() => r.value?.previsao)
@@ -78,12 +70,6 @@ async function agirAlerta(a: Alerta) {
   <div class="pagina">
     <div v-if="!r" class="d-flex justify-center pa-16"><v-progress-circular indeterminate color="primary" /></div>
     <template v-else>
-      <div class="cabecalho">
-        <div>
-          <div class="titulo-pagina">{{ nomeMes(r.hoje.slice(0, 7)).split(' de ')[0] }}</div>
-          <div class="text-body-2 text-medium-emphasis">Hoje é {{ dataBr(r.hoje, true) }}</div>
-        </div>
-      </div>
 
       <!-- ===== Saldo ===== -->
       <v-card class="destaque pa-6 mb-4" rounded="xl" data-testid="card-saldo">
@@ -93,9 +79,10 @@ async function agirAlerta(a: Alerta) {
             <div class="grande mt-1" data-testid="saldo-disponivel">{{ brl(r.saldoDisponivel) }}</div>
           </div>
           <v-spacer />
-          <v-btn variant="tonal" color="white" size="small" :prepend-icon="verContas ? 'mdi-chevron-up' : 'mdi-wallet-outline'" @click="verContas = !verContas">
-            Contas
-          </v-btn>
+          <div class="text-right" data-testid="hoje">
+            <div class="font-weight-bold text-capitalize">{{ dataBr(r.hoje, true) }}</div>
+            <div class="text-caption text-capitalize" style="opacity: 0.8">{{ nomeMes(r.hoje.slice(0, 7)) }}</div>
+          </div>
         </div>
 
         <v-expand-transition>
@@ -115,13 +102,18 @@ async function agirAlerta(a: Alerta) {
             <div class="medio" data-testid="saldo-projetado">{{ brl(periodoAtual?.saldoFim ?? r.saldoProjetado) }}</div>
             <div v-if="periodoAtual?.porDia" class="text-caption" style="opacity: 0.8">≈ {{ brl(periodoAtual.porDia) }} por dia</div>
           </v-col>
-          <v-col cols="6" sm="4">
+          <v-col cols="6" sm="3">
             <div class="rotulo" style="opacity: 0.8">Entrou no mês</div>
             <div class="medio">{{ brl(r.entradasMes) }}</div>
           </v-col>
-          <v-col cols="6" sm="4">
+          <v-col cols="6" sm="3">
             <div class="rotulo" style="opacity: 0.8">Gastei no mês</div>
             <div class="medio" data-testid="gastos-mes">{{ brl(r.saidasMes) }}</div>
+          </v-col>
+          <v-col cols="12" sm="2" class="d-flex align-end justify-sm-end">
+            <v-btn variant="tonal" color="white" size="small" :prepend-icon="verContas ? 'mdi-chevron-up' : 'mdi-wallet-outline'" @click="verContas = !verContas">
+              Contas
+            </v-btn>
           </v-col>
         </v-row>
       </v-card>
@@ -139,16 +131,6 @@ async function agirAlerta(a: Alerta) {
                 <template v-if="b.duraAte"> · no ritmo atual dura até {{ dataBr(b.duraAte) }}</template>
               </div>
             </div>
-          </v-card>
-        </v-col>
-      </v-row>
-
-      <!-- ===== Ações rápidas ===== -->
-      <v-row dense class="mb-3">
-        <v-col v-for="a in acoes" :key="a.titulo" cols="3">
-          <v-card class="text-center py-3 px-1" @click="a.fazer">
-            <v-avatar :color="a.cor" variant="tonal" rounded="lg"><v-icon>{{ a.icone }}</v-icon></v-avatar>
-            <div class="text-caption font-weight-bold mt-2 text-truncate">{{ a.titulo }}</div>
           </v-card>
         </v-col>
       </v-row>
