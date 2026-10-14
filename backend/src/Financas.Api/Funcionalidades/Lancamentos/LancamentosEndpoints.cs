@@ -10,8 +10,8 @@ public static class LancamentosEndpoints
         var g = api.MapGroup("/lancamentos");
 
         g.MapGet("/", (LancamentoConsultas c, string? mes, Guid? contaId, Guid? categoriaId,
-            TipoLancamento? tipo, StatusLancamento? status, string? busca) =>
-            c.Listar(mes, contaId, categoriaId, tipo, status, busca));
+            TipoLancamento? tipo, StatusLancamento? status, string? busca, DateOnly? desde) =>
+            c.Listar(mes, contaId, categoriaId, tipo, status, busca, desde));
         g.MapGet("/pendentes", (LancamentoConsultas c, Guid categoriaId) => c.Pendentes(categoriaId));
         g.MapGet("/{id:guid}", (Guid id, LancamentoConsultas c) => c.Obter(id));
 

@@ -31,6 +31,8 @@ export interface Lancamento {
   valorVariavel: boolean
   /** Veio de uma nota fiscal: itens em /compras/{compraId}. */
   compraId: string | null
+  /** Só na busca: itens da nota que batem com o texto (ex.: a Coca dentro da compra do mercado). */
+  itensEncontrados?: { descricao: string; quantidade: number; unidade: string | null; valorPago: number }[] | null
 }
 
 export interface AuditLog {

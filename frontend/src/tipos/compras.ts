@@ -1,4 +1,4 @@
-// Compras pela nota fiscal (NFC-e) e a busca "o que comprei".
+// Compras pela nota fiscal (NFC-e).
 
 export interface ItemLido {
   sequencia: number
@@ -55,29 +55,4 @@ export interface Compra {
   contaId: string
   conta: string
   itens: ItemCompra[]
-}
-
-export interface CompraResumo {
-  id: string
-  loja: string
-  emissao: string
-  total: number
-  itens: number
-  conta: string
-}
-
-export interface Produto {
-  descricao: string
-  vezes: number
-  quantidade: number
-  unidade: string | null
-  total: number
-  precoMedio: number
-  ultimoPreco: number
-  ultimaCompra: string
-  ultimaLoja: string
-  menorPreco: number
-  lojaMenorPreco: string
-  /** "Nota": item de nota fiscal (onde = loja). "Lancamento": compra lançada à mão (onde = conta). */
-  origem: 'Nota' | 'Lancamento'
 }

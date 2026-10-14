@@ -5,7 +5,7 @@ import { erro, estado } from '../estado'
 import { brl, dataHoraBr } from '../formato'
 import type { Compra } from '../tipos'
 
-/** Itens de uma compra lançada pela nota (abre pelo lançamento ou pela tela "O que comprei"). */
+/** Itens de uma compra lançada pela nota (abre pelo menu do lançamento: "Ver itens da nota"). */
 const compra = ref<Compra | null>(null)
 
 watch(() => estado.compra.aberto, async (aberto) => {

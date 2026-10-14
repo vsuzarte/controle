@@ -164,23 +164,6 @@ public class NotaFiscalTests
     }
 
     [Fact]
-    public async Task Busca_o_que_comprei_soma_gasto_quantidade_e_preco()
-    {
-        using var a = new Ambiente();
-        var (compras, consultas) = Servicos(a);
-        await compras.Importar(new ImportarCompraDto(Url, a.Banco.Id, null, []));
-        var outra = Servicos(a, Pagina("3526 0000 0000 0000 0000 6500 1000 0000 0220 0000 0028")).Compras;
-        await outra.Importar(new ImportarCompraDto(Url, a.Banco.Id, null, []));
-
-        var coca = (await consultas.Produtos("coca", D(2026, 1, 1), D(2026, 12, 31))).Single();
-        Assert.Equal("REFRIG COCA COLA 2L", coca.Descricao);
-        Assert.Equal(2, coca.Vezes);
-        Assert.Equal(4m, coca.Quantidade);
-        Assert.Equal(2 * CompraService.Ratear([21m, 7.78m, 3.22m], 30m)[0], coca.Total);
-        Assert.Equal(3, (await consultas.Produtos(null, D(2026, 1, 1), D(2026, 12, 31))).Count);
-    }
-
-    [Fact]
     public async Task Categoria_escolhida_antes_vira_sugestao_para_o_mesmo_produto()
     {
         using var a = new Ambiente();
@@ -195,22 +178,27 @@ public class NotaFiscalTests
     }
 
     [Fact]
-    public async Task Busca_tambem_acha_compras_lancadas_a_mao_mas_nao_contas_do_mes()
+    public async Task Busca_em_lancamentos_tambem_acha_os_itens_das_notas()
     {
         using var a = new Ambiente();
-        var (compras, consultas) = Servicos(a);
-        await compras.Importar(new ImportarCompraDto(Url, a.Banco.Id, null, []));
+        var busca = new LancamentoConsultas(a.Db, a.Relogio, a.Regras);
+        await Servicos(a).Compras.Importar(new ImportarCompraDto(Url, a.Banco.Id, "Mercado do bairro", []));
         await a.Lancamentos.Criar(new NovoLancamentoDto(TipoLancamento.Despesa, "Coca no bar", 8.5m, D(2026, 10, 10),
             a.Banco.Id, null, a.Lazer.Id, FormaPagamento.Pix, null, null, null, null));
-        await a.Lancamentos.Criar(new NovoLancamentoDto(TipoLancamento.Despesa, "coca no bar ", 9.5m, D(2026, 10, 11),
+        await a.Lancamentos.Criar(new NovoLancamentoDto(TipoLancamento.Despesa, "Coca no bar", 7m, D(2026, 8, 10),
             a.Banco.Id, null, a.Lazer.Id, FormaPagamento.Pix, null, null, null, null));
-        await a.Recorrente(TipoLancamento.Despesa, a.Energia, 100, D(2026, 10, 1)); // conta do mês não é compra
 
-        var achados = await consultas.Produtos("coca", D(2026, 1, 1), D(2026, 12, 31));
+        var achados = await busca.Listar("2026-10", null, null, null, null, "coca");
         Assert.Equal(2, achados.Count);
-        var manual = achados.Single(p => p.Origem == ComprasConsultas.OrigemLancamento);
-        Assert.Equal((2, 18m, "Banco"), (manual.Vezes, manual.Total, manual.UltimaLoja)); // mesmo nome, maiúsculas/espaços à parte
-        Assert.Equal(ComprasConsultas.OrigemNota, achados.Single(p => p.Descricao.StartsWith("REFRIG")).Origem);
-        Assert.DoesNotContain(await consultas.Produtos(null, D(2026, 1, 1), D(2026, 12, 31)), p => p.Descricao == "Energia");
+        var mercado = achados.Single(l => l.CompraId != null);
+        Assert.Equal("Mercado do bairro", mercado.Descricao);
+        Assert.Equal("REFRIG COCA COLA 2L", mercado.ItensEncontrados!.Single().Descricao);
+        Assert.Equal(2m, mercado.ItensEncontrados!.Single().Quantidade);
+        Assert.Null(achados.Single(l => l.CompraId == null).ItensEncontrados);
+
+        // Vários meses: do mês escolhido para trás até "desde".
+        Assert.Equal(3, (await busca.Listar("2026-10", null, null, null, null, "coca", D(2026, 1, 1))).Count);
+        // Sem busca, nada muda: o lançamento vem sem a lista de itens.
+        Assert.All(await busca.Listar("2026-10", null, null, null, null, null), l => Assert.Null(l.ItensEncontrados));
     }
 }

@@ -35,7 +35,6 @@ const menu = [
   { to: '/planejamento', titulo: 'Planejamento', icone: 'mdi-chart-donut', iconeAtivo: 'mdi-chart-donut' },
   { to: '/cartoes', titulo: 'Cartões', icone: 'mdi-credit-card-outline', iconeAtivo: 'mdi-credit-card' },
   { to: '/relatorios', titulo: 'Relatórios', icone: 'mdi-chart-line', iconeAtivo: 'mdi-chart-line' },
-  { to: '/compras', titulo: 'O que comprei', icone: 'mdi-basket-outline', iconeAtivo: 'mdi-basket' },
   { to: '/cadastros', titulo: 'Ajustes', icone: 'mdi-cog-outline', iconeAtivo: 'mdi-cog' },
 ]
 const barraEsquerda = menu.slice(0, 2)

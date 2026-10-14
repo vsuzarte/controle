@@ -10,7 +10,7 @@ import type { LeituraNota } from '../tipos'
 
 /**
  * Lançar uma compra pela nota fiscal: link ou foto do QR code → conferir (loja, conta, categoria de cada item) → lançar.
- * Vira um lançamento por categoria; os itens ficam guardados para a busca "O que comprei".
+ * Vira um lançamento por categoria; os itens ficam guardados e a busca de Lançamentos também procura neles.
  */
 const { smAndDown } = useDisplay()
 const link = ref('')

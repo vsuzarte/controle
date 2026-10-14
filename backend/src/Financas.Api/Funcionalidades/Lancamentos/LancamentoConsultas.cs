@@ -9,7 +9,7 @@ namespace Financas.Api.Funcionalidades.Lancamentos;
 public class LancamentoConsultas(AppDbContext db, IRelogio relogio, RegraService regras)
 {
     public async Task<List<LancamentoView>> Listar(string? mes, Guid? contaId, Guid? categoriaId,
-        TipoLancamento? tipo, StatusLancamento? status, string? busca)
+        TipoLancamento? tipo, StatusLancamento? status, string? busca, DateOnly? desde = null)
     {
         var q = db.Lancamentos.Include(l => l.Conta).Include(l => l.ContaDestino)
             .Include(l => l.Categoria).Include(l => l.Regra).AsQueryable();
@@ -18,15 +18,28 @@ public class LancamentoConsultas(AppDbContext db, IRelogio relogio, RegraService
             var inicio = Calendario.ParseMes(mes);
             var fim = Calendario.FimMes(inicio);
             await regras.Sincronizar(fim);
-            q = q.Where(l => l.Data >= inicio && l.Data <= fim);
+            // "desde": busca em vários meses (do mês escolhido para trás até essa data).
+            var de = desde is { } d && d < inicio ? d : inicio;
+            q = q.Where(l => l.Data >= de && l.Data <= fim);
         }
         if (contaId is { } c) q = q.Where(l => l.ContaId == c || l.ContaDestinoId == c);
         if (categoriaId is { } cat) q = q.Where(l => l.CategoriaId == cat);
         if (tipo is { } t) q = q.Where(l => l.Tipo == t);
         if (status is { } s) q = q.Where(l => l.Status == s);
-        if (!string.IsNullOrWhiteSpace(busca)) q = q.Where(l => EF.Functions.Like(l.Descricao, $"%{busca.Trim()}%"));
+        var texto = string.IsNullOrWhiteSpace(busca) ? null : $"%{busca.Trim()}%";
+        // A busca olha a descrição do lançamento e também os itens das notas fiscais (ex.: "coca" acha a compra do mercado).
+        if (texto is not null)
+            q = q.Where(l => EF.Functions.Like(l.Descricao, texto)
+                             || db.ItensCompra.Any(i => i.LancamentoId == l.Id && EF.Functions.Like(i.Descricao, texto)));
         var lista = await q.OrderByDescending(l => l.Data).ThenByDescending(l => l.CriadoEm).Take(2000).ToListAsync();
-        return lista.Select(LancamentoView.De).ToList();
+        if (texto is null) return lista.Select(LancamentoView.De).ToList();
+
+        var ids = lista.Where(l => l.CompraId != null).Select(l => l.Id).ToList();
+        var itens = (await db.ItensCompra.Where(i => i.LancamentoId != null && ids.Contains(i.LancamentoId.Value) && EF.Functions.Like(i.Descricao, texto))
+                .OrderBy(i => i.Sequencia).ToListAsync())
+            .GroupBy(i => i.LancamentoId!.Value)
+            .ToDictionary(g => g.Key, g => g.Select(i => new ItemEncontradoView(i.Descricao, i.Quantidade, i.Unidade, i.ValorPago)).ToList());
+        return lista.Select(l => LancamentoView.De(l) with { ItensEncontrados = itens.GetValueOrDefault(l.Id) }).ToList();
     }
 
     /// <summary>

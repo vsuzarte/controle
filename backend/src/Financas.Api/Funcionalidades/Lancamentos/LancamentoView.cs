@@ -32,7 +32,9 @@ public record LancamentoView(
     /// <summary>Veio de uma conta do mês com valor que muda (luz, água): pagar mais não é juros.</summary>
     bool ValorVariavel,
     /// <summary>Veio de uma nota fiscal: os itens estão em /compras/{CompraId}.</summary>
-    Guid? CompraId)
+    Guid? CompraId,
+    /// <summary>Só na busca: os itens da nota que batem com o texto buscado (ex.: a Coca dentro da compra do mercado).</summary>
+    List<ItemEncontradoView>? ItensEncontrados = null)
 {
     public static LancamentoView De(Lancamento l) => new(
         l.Id, l.Tipo, l.Status, l.Descricao, l.Valor, l.Data,

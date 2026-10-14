@@ -156,8 +156,8 @@ inteira: ela tem `dados/`, `backups/` e o `.env` com a sua senha.
   (antes/depois, data e motivo) na mesma transação.
 
 - **Compras pela nota fiscal (NFC-e de SP):** foto do QR code ou link → conferir loja, conta e categoria de cada item →
-  vira um lançamento por categoria (o total bate com o banco/cartão). Os itens ficam guardados para a tela
-  "O que comprei" (quanto gastou com cada produto, preço médio, onde estava mais barato). CPF/nome da nota não são guardados.
+  vira um lançamento por categoria (o total bate com o banco/cartão). Os itens ficam guardados: a busca de
+  Lançamentos também procura neles ("coca" acha a compra do mercado e mostra o item e quanto custou). CPF/nome da nota não são guardados.
 
 **Saldo disponível** = contas (sem cartões), só com o que já foi realizado até hoje.
 **Saldo projetado no fim do mês** = saldo disponível + a receber − contas a pagar − faturas a vencer − orçamento variável restante.

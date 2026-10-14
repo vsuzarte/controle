@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useDisplay } from 'vuetify'
 import { api, qs } from '../api'
 import { erro, estado, lerNotaFiscal } from '../estado'
-import { brl, dataBr, hojeIso } from '../formato'
+import { brl, dataBr, hojeIso, somarMeses } from '../formato'
 import { ordenarLancamentos, somarEntradas, type OrdemLancamentos } from '../regras'
 import type { Lancamento } from '../tipos'
 import LancamentoLinha from '../components/LancamentoLinha.vue'
@@ -15,6 +15,9 @@ const carregando = ref(false)
 const filtros = reactive({ busca: '', contaId: null as string | null, categoriaId: null as string | null, status: null as string | null })
 const verCancelados = ref(false)
 const verFiltros = ref(false)
+/** Com busca: procurar só no mês ou nos meses anteriores também (ex.: quanto gastei com coca no ano). */
+const periodoBusca = ref<'mes' | '12' | 'tudo'>('12')
+const desdeBusca = computed(() => periodoBusca.value === 'mes' ? null : periodoBusca.value === 'tudo' ? '2000-01-01' : somarMeses(estado.mes, -11) + '-01')
 
 // ---------- preferências lembradas neste aparelho ----------
 const lembrar = <T extends string>(chave: string, padrao: T, validos: T[]) => {
@@ -34,7 +37,7 @@ const ORDENS: { value: OrdemLancamentos; title: string; icone: string }[] = [
 async function carregar() {
   carregando.value = true
   try {
-    lista.value = await api.get<Lancamento[]>('/lancamentos' + qs({ mes: estado.mes, ...filtros }))
+    lista.value = await api.get<Lancamento[]>('/lancamentos' + qs({ mes: estado.mes, ...filtros, desde: filtros.busca ? desdeBusca.value : null }))
   } catch (e) {
     erro(e)
   } finally {
@@ -43,7 +46,7 @@ async function carregar() {
 }
 onMounted(carregar)
 let espera: ReturnType<typeof setTimeout>
-watch(() => [estado.mes, estado.versao, filtros.contaId, filtros.categoriaId, filtros.status], carregar)
+watch(() => [estado.mes, estado.versao, filtros.contaId, filtros.categoriaId, filtros.status, periodoBusca.value], carregar)
 watch(() => filtros.busca, () => { clearTimeout(espera); espera = setTimeout(carregar, 300) })
 
 /** Vales (VR/VA): a recarga aparece nas entradas, mas somada à parte. */
@@ -81,6 +84,11 @@ const totais = computed(() => {
     previsto: lista.value.filter((l) => l.status === 'Previsto' && l.tipo === 'Despesa').reduce((s, l) => s + l.valor, 0),
   }
 })
+/** Com busca: quanto foi gasto com o que foi buscado (na compra do mercado, só o item encontrado, não a nota inteira). */
+const gastoNaBusca = computed(() => filtros.busca
+  ? lista.value.filter((l) => l.tipo === 'Despesa' && l.status !== 'Cancelado')
+    .reduce((s, l) => s + (l.itensEncontrados?.length ? l.itensEncontrados.reduce((t, i) => t + i.valorPago, 0) : l.valor), 0)
+  : 0)
 const qtdCancelados = computed(() => lista.value.filter((l) => l.status === 'Cancelado').length)
 const filtrosAtivos = computed(() => [filtros.contaId, filtros.categoriaId, filtros.status].filter(Boolean).length)
 
@@ -102,7 +110,15 @@ const opcoesCategorias = computed(() => estado.categorias.map((c) => ({ title: `
         <span class="text-caption mr-2">{{ t.rotulo }}</span><span class="valor">{{ brl(t.valor) }}</span>
       </v-chip>
       <v-spacer />
-      <v-text-field v-model="filtros.busca" prepend-inner-icon="mdi-magnify" placeholder="Buscar" density="compact" clearable hide-details
+      <template v-if="filtros.busca">
+        <v-btn-toggle v-model="periodoBusca" mandatory density="compact" variant="outlined" divided rounded="lg" aria-label="Buscar em">
+          <v-btn value="mes" size="small">Mês</v-btn>
+          <v-btn value="12" size="small">12 meses</v-btn>
+          <v-btn value="tudo" size="small">Tudo</v-btn>
+        </v-btn-toggle>
+        <v-chip color="primary" variant="tonal" label data-testid="gasto-busca"><span class="text-caption mr-2">Gasto na busca</span><span class="valor">{{ brl(gastoNaBusca) }}</span></v-chip>
+      </template>
+      <v-text-field v-model="filtros.busca" prepend-inner-icon="mdi-magnify" placeholder="Buscar (também itens das notas)" density="compact" clearable hide-details
         aria-label="Buscar" style="min-width: 180px; max-width: 280px" />
       <v-btn variant="tonal" icon="mdi-qrcode-scan" rounded="lg" size="40" color="primary" title="Lançar pela nota fiscal (QR code)" aria-label="Lançar pela nota fiscal" @click="lerNotaFiscal()" />
       <v-menu>

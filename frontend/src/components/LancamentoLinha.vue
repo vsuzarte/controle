@@ -87,6 +87,10 @@ async function executar() {
       <v-icon v-if="l.regraId" size="14" class="text-medium-emphasis">{{ l.totalParcelas ? 'mdi-credit-card-clock-outline' : 'mdi-repeat' }}</v-icon>
     </v-list-item-title>
     <v-list-item-subtitle>{{ subtitulo }}</v-list-item-subtitle>
+    <div v-for="i in l.itensEncontrados ?? []" :key="i.descricao" class="text-caption text-primary d-flex align-center ga-1" data-testid="item-encontrado">
+      <v-icon size="13">mdi-receipt-text-outline</v-icon>
+      {{ i.descricao }} · {{ i.quantidade.toLocaleString('pt-BR', { maximumFractionDigits: 3 }) }} {{ i.unidade?.toLowerCase() }} · {{ brl(i.valorPago) }}
+    </div>
     <v-list-item-subtitle v-if="cancelado && l.motivoCancelamento" class="font-italic">{{ l.motivoCancelamento }}</v-list-item-subtitle>
 
     <template #append>
