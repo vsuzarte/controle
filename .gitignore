@@ -6,8 +6,8 @@ CLAUDE.local.md
 
 # Segredos e dados locais
 .env
-dados/
-backups/
+/dados/
+/backups/
 *.db
 *.db-shm
 *.db-wal
