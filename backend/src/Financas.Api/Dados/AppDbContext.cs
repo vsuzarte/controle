@@ -14,6 +14,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Regra> Regras => Set<Regra>();
     public DbSet<OrcamentoItem> OrcamentoItens => Set<OrcamentoItem>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<PeriodoSalvo> PeriodosSalvos => Set<PeriodoSalvo>();
+    public DbSet<Configuracao> Configuracoes => Set<Configuracao>();
 
     /// <summary>Operação e motivo da próxima gravação, registrados na auditoria.</summary>
     private string? _operacao;
@@ -74,6 +76,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.HasOne(x => x.Categoria).WithMany().HasForeignKey(x => x.CategoriaId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(x => new { x.Mes, x.CategoriaId }).IsUnique();
+        });
+
+        b.Entity<PeriodoSalvo>(e => e.Property(x => x.Nome).HasMaxLength(80));
+        b.Entity<Configuracao>(e =>
+        {
+            e.HasKey(x => x.Chave);
+            e.Property(x => x.Chave).HasMaxLength(80);
+            e.Property(x => x.Valor).HasMaxLength(500);
         });
 
         b.Entity<AuditLog>(e =>

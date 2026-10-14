@@ -40,7 +40,9 @@ public record PeriodoPrevisao(
     decimal DiaADia,
     int DiasRestantes,
     decimal? PorDia,
-    List<ItemPrevisao> Itens);
+    List<ItemPrevisao> Itens,
+    /// <summary>Período de hoje sem nada pendente: aparece resumido e a previsão já mostra o seguinte.</summary>
+    bool Quitado = false);
 
 public record PrevisaoView(
     DateOnly Hoje,
@@ -54,11 +56,15 @@ public record PrevisaoView(
     decimal Entradas,
     decimal Contas,
     decimal Faturas,
-    decimal DiaADia);
+    decimal DiaADia,
+    /// <summary>Intervalo escolhido pelo usuário (em vez da janela automática).</summary>
+    bool Personalizado = false);
 
 /// <summary>
-/// Previsão em regime de caixa, por ciclo de salário: do pagamento principal (o maior, ex.: 5º dia útil)
-/// até o próximo, dividido em períodos a cada outro pagamento (ex.: adiantamento do dia 20).
+/// Previsão em regime de caixa dividida em períodos de pagamento: cada pagamento (salário do 5º dia útil,
+/// adiantamento do dia 20...) cobre as contas até o pagamento seguinte. A janela mostra o período de hoje e
+/// mais um mês de pagamentos à frente (com dois pagamentos por mês: o atual e os dois seguintes), para planejar
+/// desde já o que o próximo salário vai ter que pagar.
 /// Só conta o dinheiro que paga contas (sem cartões nem vales). Compras no cartão entram pela fatura,
 /// no período em que ela vence. Saldo de cada período:
 ///   - datas passadas: saldo real;
@@ -69,48 +75,123 @@ public class PrevisaoService(AppDbContext db, IRelogio relogio, RegraService reg
 {
     private DateOnly Hoje => relogio.Hoje;
 
-    private record DiaPagamento(DateOnly Data, string Nome, bool Principal);
+    private record DiaPagamento(DateOnly Data, string Nome, Guid RegraId);
 
-    public async Task<PrevisaoView> Obter(DateOnly? data = null)
+    /// <summary>
+    /// Visão automática: o período de hoje e mais um mês de pagamentos à frente. Se o período de hoje já está
+    /// todo pago e recebido, ele aparece como quitado e a janela avança um período.
+    /// Com <paramref name="de"/> e <paramref name="ate"/>, mostra esse intervalo (dividido pelos pagamentos dentro dele).
+    /// </summary>
+    public async Task<PrevisaoView> Obter(DateOnly? data = null, DateOnly? de = null, DateOnly? ate = null)
     {
+        if (de is { } d0 && ate is { } a0) return await Intervalo(d0, a0);
+
         var referencia = data ?? Hoje;
-        var pagamentos = await DiasDePagamento(referencia.AddMonths(-3), referencia.AddMonths(3));
-        var principais = pagamentos.Where(p => p.Principal).Select(p => p.Data).Distinct().Order().ToList();
+        var config = await Config();
+        // Quantos pagamentos por mês vem do cadastro (Contas do mês), não do código. Padrão: um mês de pagamentos à frente.
+        var porMes = await PagamentosPorMes();
+        var ateAntesDo = config.AteAntesDoPagamento ?? porMes + 1;
+        var pagamentos = await DiasDePagamento(referencia.AddMonths(-3), referencia.AddMonths(4 + ateAntesDo));
+        var datas = pagamentos.Select(p => p.Data).Distinct().Order().ToList();
+        var futuras = datas.Where(d => d > referencia).ToList();
 
-        DateOnly inicio, fim;
-        var porSalario = principais.Any(p => p <= referencia) && principais.Any(p => p > referencia);
-        if (porSalario)
-        {
-            inicio = principais.Last(p => p <= referencia);
-            fim = principais.First(p => p > referencia).AddDays(-1);
-        }
-        else
-        {
-            inicio = Calendario.InicioMes(referencia);
-            fim = Calendario.FimMes(referencia);
-        }
+        if (!datas.Any(d => d <= referencia) || futuras.Count < ateAntesDo + 1)
+            return await Montar([Calendario.InicioMes(referencia)], Calendario.FimMes(referencia), pagamentos, porSalario: false, pularQuitados: false);
 
+        var fronteiras = new List<DateOnly> { datas.Last(d => d <= referencia) };
+        fronteiras.AddRange(futuras);
+        // O período de hoje (talvez quitado) e mais N: monta um a mais para a janela poder avançar.
+        var quantos = Math.Min(fronteiras.Count - 1, ateAntesDo + 1);
+        return await Montar(fronteiras.Take(quantos).ToList(), fronteiras[quantos].AddDays(-1), pagamentos, porSalario: true,
+            pularQuitados: data is null && config.PularQuitado, visiveis: ateAntesDo);
+    }
+
+    // ---------- Configuração da janela ----------
+
+    private const string ChaveAteAntes = "Previsao.AteAntesDoPagamento";
+    private const string ChavePularQuitado = "Previsao.PularQuitado";
+
+    public async Task<ConfigPrevisaoDto> Config()
+    {
+        var c = await db.Configuracoes.Where(x => x.Chave.StartsWith("Previsao.")).ToDictionaryAsync(x => x.Chave, x => x.Valor);
+        return new ConfigPrevisaoDto(
+            c.TryGetValue(ChaveAteAntes, out var n) && int.TryParse(n, out var v) ? v : null,
+            !c.TryGetValue(ChavePularQuitado, out var p) || p != "false");
+    }
+
+    public async Task<ConfigPrevisaoView> VerConfig()
+    {
+        var c = await Config();
+        var porMes = await PagamentosPorMes();
+        var hoje = await Obter();
+        return new ConfigPrevisaoView(c.AteAntesDoPagamento, c.PularQuitado, porMes + 1, porMes, hoje.PorSalario ? hoje.Fim : null);
+    }
+
+    public async Task<ConfigPrevisaoView> SalvarConfig(ConfigPrevisaoDto dto)
+    {
+        if (dto.AteAntesDoPagamento is not null and not (>= 1 and <= 24))
+            throw new RegraNegocioException("Escolha de 1 a 24 pagamentos à frente.");
+        await Gravar(ChaveAteAntes, dto.AteAntesDoPagamento?.ToString());
+        await Gravar(ChavePularQuitado, dto.PularQuitado ? "true" : "false");
+        await db.SaveChangesAsync();
+        return await VerConfig();
+    }
+
+    private async Task Gravar(string chave, string? valor)
+    {
+        var c = await db.Configuracoes.FindAsync(chave);
+        if (valor is null) { if (c is not null) db.Configuracoes.Remove(c); return; }
+        if (c is null) db.Configuracoes.Add(new Configuracao { Chave = chave, Valor = valor });
+        else c.Valor = valor;
+    }
+
+    /// <summary>Quantas entradas marcadas como dia de pagamento estão ativas (cada uma = um pagamento por mês).</summary>
+    private async Task<int> PagamentosPorMes() => Math.Max(1, (await RegrasDePagamento()).Count);
+
+    /// <summary>Intervalo escolhido pelo usuário, dividido pelos dias de pagamento que caem dentro dele.</summary>
+    private async Task<PrevisaoView> Intervalo(DateOnly de, DateOnly ate)
+    {
+        if (ate < de) throw new RegraNegocioException("A data final do período deve ser depois da inicial.");
+        if (ate > de.AddYears(1)) throw new RegraNegocioException("Escolha um período de até um ano.");
+        var pagamentos = await DiasDePagamento(de.AddMonths(-1), ate);
+        var inicios = new List<DateOnly> { de };
+        inicios.AddRange(pagamentos.Select(p => p.Data).Where(d => d > de && d <= ate).Distinct().Order());
+        return await Montar(inicios, ate, pagamentos, porSalario: pagamentos.Count > 0, pularQuitados: false) with { Personalizado = true };
+    }
+
+    /// <summary>
+    /// Monta os períodos a partir dos inícios. Com pularQuitados, o período de hoje sem nada pendente fica marcado
+    /// como quitado e não conta na janela visível, que continua com <paramref name="visiveis"/> períodos.
+    /// </summary>
+    private async Task<PrevisaoView> Montar(List<DateOnly> inicios, DateOnly fim, List<DiaPagamento> pagamentos,
+        bool porSalario, bool pularQuitados, int? visiveis = null)
+    {
         await regras.Sincronizar(fim);
+        var dados = await Carregar(inicios[0].AddMonths(-24), fim);
 
-        // Fronteiras dos períodos: o início do ciclo e cada outro pagamento dentro dele.
-        var cortes = pagamentos.Where(p => p.Data > inicio && p.Data <= fim).Select(p => p.Data).Distinct().Order().ToList();
-        var inicios = new List<DateOnly> { inicio };
-        if (porSalario) inicios.AddRange(cortes);
-
-        var dados = await Carregar(inicio.AddMonths(-24), fim);
-        var periodos = new List<PeriodoPrevisao>();
+        var todos = new List<PeriodoPrevisao>();
         for (var i = 0; i < inicios.Count; i++)
         {
             var pIni = inicios[i];
             var pFim = i + 1 < inicios.Count ? inicios[i + 1].AddDays(-1) : fim;
             var nomes = pagamentos.Where(p => p.Data == pIni).Select(p => p.Nome).Distinct().ToList();
-            var titulo = nomes.Count > 0 ? string.Join(" + ", nomes) : porSalario ? "Período" : "Mês";
-            periodos.Add(MontarPeriodo(dados, pIni, pFim, titulo));
+            var titulo = nomes.Count > 0 ? string.Join(" + ", nomes) : porSalario ? $"A partir de {pIni:dd/MM}" : "Mês";
+            todos.Add(MontarPeriodo(dados, pIni, pFim, titulo));
         }
 
-        return new PrevisaoView(Hoje, inicio, fim, porSalario, periodos,
-            periodos[0].SaldoInicio, periodos[^1].SaldoFim,
-            periodos.Sum(p => p.Entradas), periodos.Sum(p => p.Contas), periodos.Sum(p => p.Faturas), periodos.Sum(p => p.DiaADia));
+        var periodos = new List<PeriodoPrevisao>();
+        var visiveisAte = visiveis ?? todos.Count;
+        foreach (var p in todos)
+        {
+            var quitado = pularQuitados && periodos.Count == 0 && p.Inicio <= Hoje && !p.Itens.Any(i => i.Pendente);
+            if (quitado) { periodos.Add(p with { Quitado = true }); continue; }
+            if (periodos.Count(x => !x.Quitado) < visiveisAte) periodos.Add(p);
+        }
+
+        var abertos = periodos.Where(p => !p.Quitado).ToList();
+        return new PrevisaoView(Hoje, abertos[0].Inicio, abertos[^1].Fim, porSalario, periodos,
+            abertos[0].SaldoInicio, abertos[^1].SaldoFim,
+            abertos.Sum(p => p.Entradas), abertos.Sum(p => p.Contas), abertos.Sum(p => p.Faturas), abertos.Sum(p => p.DiaADia));
     }
 
     /// <summary>
@@ -119,15 +200,9 @@ public class PrevisaoService(AppDbContext db, IRelogio relogio, RegraService reg
     /// </summary>
     private async Task<List<DiaPagamento>> DiasDePagamento(DateOnly de, DateOnly ate)
     {
-        var candidatas = await db.Regras.Include(r => r.Categoria).Include(r => r.Conta)
-            .Where(r => r.Ativa && r.Modo == ModoRegra.Recorrente && r.Tipo == TipoLancamento.Receita)
-            .ToListAsync();
-        var salarios = candidatas
-            .Where(r => r.Conta!.EhDisponivel && (r.IniciaPeriodo ?? EhSalario(r.Categoria!.Nome)))
-            .ToList();
+        var salarios = await RegrasDePagamento();
         if (salarios.Count == 0) return [];
 
-        var principal = salarios.OrderByDescending(r => r.Valor).ThenBy(r => r.DataInicio.Day).First();
         var ids = salarios.Select(r => r.Id).ToList();
         var reais = await db.Lancamentos
             .Where(l => l.RegraId != null && ids.Contains(l.RegraId.Value) && l.Status != StatusLancamento.Cancelado)
@@ -142,10 +217,18 @@ public class PrevisaoService(AppDbContext db, IRelogio relogio, RegraService reg
                 var prevista = Calendario.Ocorrencia(r, n);
                 if (prevista > ate.AddMonths(1) || (r.DataFim is { } f && prevista > f)) break;
                 var data = reais.FirstOrDefault(x => x.RegraId == r.Id && x.Sequencia == n)?.Data ?? prevista;
-                if (data >= de && data <= ate) dias.Add(new DiaPagamento(data, r.Descricao, r.Id == principal.Id));
+                if (data >= de && data <= ate) dias.Add(new DiaPagamento(data, r.Descricao, r.Id));
             }
         }
         return dias.OrderBy(d => d.Data).ToList();
+    }
+
+    private async Task<List<Regra>> RegrasDePagamento()
+    {
+        var candidatas = await db.Regras.Include(r => r.Categoria).Include(r => r.Conta)
+            .Where(r => r.Ativa && r.Modo == ModoRegra.Recorrente && r.Tipo == TipoLancamento.Receita)
+            .ToListAsync();
+        return candidatas.Where(r => r.Conta!.EhDisponivel && (r.IniciaPeriodo ?? EhSalario(r.Categoria!.Nome))).ToList();
     }
 
     public static bool EhSalario(string categoria) =>

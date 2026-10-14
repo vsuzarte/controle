@@ -63,7 +63,10 @@ public static class Api
 
         api.MapGet("/resumo", (ResumoService s) => s.Obter());
         // Previsão do ciclo de salário que contém a data (padrão: hoje).
-        api.MapGet("/previsao", (PrevisaoService s, DateOnly? data) => s.Obter(data));
+        api.MapGet("/previsao", (PrevisaoService s, DateOnly? data, DateOnly? de, DateOnly? ate) => s.Obter(data, de, ate));
+        MapearPeriodosSalvos(api);
+        api.MapGet("/previsao/config", (PrevisaoService s) => s.VerConfig());
+        api.MapPut("/previsao/config", (ConfigPrevisaoDto dto, PrevisaoService s) => s.SalvarConfig(dto));
         api.MapGet("/relatorios/comparativo", (RelatorioService s, IRelogio relogio, string? mes, int? meses) =>
             s.Comparativo(string.IsNullOrEmpty(mes) ? relogio.Hoje : Calendario.ParseMes(mes), meses ?? 6));
 
@@ -260,6 +263,44 @@ public static class Api
         g.MapPut("/{id:guid}", async (Guid id, EditarRegraDto dto, RegraService s) => (await s.Editar(id, dto)).Id);
         g.MapPost("/{id:guid}/desativar", async (Guid id, DesativarRegraDto dto, RegraService s) => (await s.Desativar(id, dto)).Id);
         g.MapPost("/{id:guid}/reativar", async (Guid id, RegraService s) => (await s.Reativar(id)).Id);
+    }
+
+    /// <summary>Intervalos de datas salvos para a previsão. São preferência de tela: podem ser editados e excluídos.</summary>
+    private static void MapearPeriodosSalvos(RouteGroupBuilder api)
+    {
+        var g = api.MapGroup("/previsao/periodos");
+        g.MapGet("/", (AppDbContext db) => db.PeriodosSalvos.OrderBy(p => p.De).ThenBy(p => p.Nome).ToListAsync());
+        g.MapPost("/", async (PeriodoSalvoDto dto, AppDbContext db) =>
+        {
+            var p = new PeriodoSalvo();
+            AplicarPeriodo(p, dto);
+            db.PeriodosSalvos.Add(p);
+            await db.SaveChangesAsync();
+            return p;
+        });
+        g.MapPut("/{id:guid}", async (Guid id, PeriodoSalvoDto dto, AppDbContext db) =>
+        {
+            var p = await db.PeriodosSalvos.FindAsync(id) ?? throw new RegraNegocioException("Período não encontrado.");
+            AplicarPeriodo(p, dto);
+            await db.SaveChangesAsync();
+            return p;
+        });
+        g.MapDelete("/{id:guid}", async (Guid id, AppDbContext db) =>
+        {
+            var p = await db.PeriodosSalvos.FindAsync(id) ?? throw new RegraNegocioException("Período não encontrado.");
+            db.PeriodosSalvos.Remove(p);
+            await db.SaveChangesAsync();
+            return Results.Ok();
+        });
+    }
+
+    private static void AplicarPeriodo(PeriodoSalvo p, PeriodoSalvoDto dto)
+    {
+        if (dto.Ate < dto.De) throw new RegraNegocioException("A data final do período deve ser depois da inicial.");
+        if (dto.Ate > dto.De.AddYears(1)) throw new RegraNegocioException("Escolha um período de até um ano.");
+        p.Nome = Validar.Texto(dto.Nome, "Nome");
+        p.De = dto.De;
+        p.Ate = dto.Ate;
     }
 
     private static void MapearCartoes(RouteGroupBuilder api)

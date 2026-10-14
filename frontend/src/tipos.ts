@@ -218,6 +218,8 @@ export interface PeriodoPrevisao {
   diasRestantes: number
   porDia: number | null
   itens: ItemPrevisao[]
+  /** Período de hoje já todo pago/recebido: aparece resumido e a janela avança. */
+  quitado: boolean
 }
 
 export interface Previsao {
@@ -232,6 +234,23 @@ export interface Previsao {
   contas: number
   faturas: number
   diaADia: number
+  personalizado: boolean
+}
+
+export interface PeriodoSalvo {
+  id: string
+  nome: string
+  de: string
+  ate: string
+}
+
+export interface ConfigPrevisao {
+  /** Mostrar até antes do N-ésimo próximo pagamento (null = padrão). */
+  ateAntesDoPagamento: number | null
+  pularQuitado: boolean
+  padrao: number
+  pagamentosPorMes: number
+  ateHoje: string | null
 }
 
 export interface CartaoResumo {

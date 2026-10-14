@@ -81,6 +81,17 @@ public record EditarRegraDto(
 public record DesativarRegraDto(bool CancelarPrevistos, string? Motivo);
 
 /// <summary>Juros: parte do valor que foi juros/multa (vira uma despesa separada em "Tarifas e juros").</summary>
+/// <summary>
+/// Regra da janela da previsão e dos vencimentos da tela inicial.
+/// AteAntesDoPagamento: mostrar tudo que vence até antes do N-ésimo próximo pagamento (nulo = padrão: um mês de pagamentos).
+/// </summary>
+public record ConfigPrevisaoDto(int? AteAntesDoPagamento, bool PularQuitado);
+
+/// <summary>Configuração atual mais o que ajuda a entender o efeito: o padrão e até que data a janela vai hoje.</summary>
+public record ConfigPrevisaoView(int? AteAntesDoPagamento, bool PularQuitado, int Padrao, int PagamentosPorMes, DateOnly? AteHoje);
+
+public record PeriodoSalvoDto(string Nome, DateOnly De, DateOnly Ate);
+
 public record PagarFaturaDto(Guid ContaOrigemId, decimal Valor, DateOnly Data, decimal? Juros = null);
 
 public record ValorOrcamentoDto(decimal Valor, string? Motivo);

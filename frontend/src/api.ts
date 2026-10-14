@@ -25,6 +25,7 @@ export const api = {
   get: <T>(url: string) => req<T>('GET', url),
   post: <T = unknown>(url: string, corpo: unknown = {}) => req<T>('POST', url, corpo),
   put: <T = unknown>(url: string, corpo: unknown) => req<T>('PUT', url, corpo),
+  del: <T = unknown>(url: string) => req<T>('DELETE', url),
 }
 
 /** Monta query string ignorando valores vazios. */

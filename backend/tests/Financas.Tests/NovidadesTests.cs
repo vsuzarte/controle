@@ -141,7 +141,7 @@ public class NovidadesTests
     }
 
     [Fact]
-    public async Task Previsao_divide_o_ciclo_nos_dois_pagamentos()
+    public async Task Previsao_mostra_o_periodo_atual_e_mais_um_mes_de_pagamentos()
     {
         using var a = new Ambiente(); // hoje 15/10, banco com 1000
         await Salario(a, "Salário", 4000, D(2026, 11, 1), RegraVencimento.DiaUtil, 5);  // 09/11 (antes: 07/10)
@@ -153,8 +153,8 @@ public class NovidadesTests
         var p = await a.Previsao.Obter();
         Assert.True(p.PorSalario);
         Assert.Equal(D(2026, 10, 7), p.Inicio);
-        Assert.Equal(D(2026, 11, 8), p.Fim);
-        Assert.Equal(2, p.Periodos.Count);
+        Assert.Equal(D(2026, 11, 19), p.Fim); // até antes do adiantamento de novembro
+        Assert.Equal(3, p.Periodos.Count);
 
         var (atual, proximo) = (p.Periodos[0], p.Periodos[1]);
         Assert.True(atual.Atual);
@@ -167,14 +167,74 @@ public class NovidadesTests
         Assert.Equal(900, proximo.SaldoInicio);
         Assert.Contains(proximo.Itens, i => i.Tipo == TipoItemPrevisao.Entrada && i.Valor == 2000);
         Assert.Contains(proximo.Itens, i => i.Tipo == TipoItemPrevisao.Conta && i.Valor == 200);
-        Assert.DoesNotContain(proximo.Itens, i => i.Tipo == TipoItemPrevisao.Fatura); // vence 10/11, fora do ciclo
+        Assert.DoesNotContain(proximo.Itens, i => i.Tipo == TipoItemPrevisao.Fatura); // vence 10/11: quem paga é o salário
+        Assert.Equal(D(2026, 11, 8), proximo.Fim);
         Assert.Equal(900 + 2000 - 200, proximo.SaldoFim);
 
-        // Próximo ciclo começa no salário de 09/11 e já carrega a fatura de 10/11.
+        // O salário de 09/11 cobre o que vence até antes do adiantamento de 20/11.
+        var salario = p.Periodos[2];
+        Assert.Equal("Salário", salario.Titulo);
+        Assert.Equal((D(2026, 11, 9), D(2026, 11, 19)), (salario.Inicio, salario.Fim));
+        Assert.Contains(salario.Itens, i => i.Tipo == TipoItemPrevisao.Entrada && i.Valor == 4000);
+        Assert.Contains(salario.Itens, i => i.Tipo == TipoItemPrevisao.Fatura && i.Valor == 300);
+        Assert.Equal(2700 + 4000 - 300, salario.SaldoFim);
+
+        // A janela anda com a data: depois do salário, começa nele.
         var seguinte = await a.Previsao.Obter(D(2026, 11, 9));
         Assert.Equal(D(2026, 11, 9), seguinte.Inicio);
         Assert.Equal(2700, seguinte.SaldoInicio);
-        Assert.Contains(seguinte.Periodos[0].Itens, i => i.Tipo == TipoItemPrevisao.Fatura && i.Valor == 300);
+        Assert.Equal(3, seguinte.Periodos.Count);
+    }
+
+    [Fact]
+    public async Task Periodo_de_hoje_todo_pago_aparece_quitado_e_a_janela_avanca()
+    {
+        using var a = new Ambiente(); // hoje 15/10
+        await Salario(a, "Salário", 4000, D(2026, 11, 1), RegraVencimento.DiaUtil, 5); // 07/10 (virtual), 09/11, 07/12
+        await Salario(a, "Adiantamento", 2000, D(2026, 10, 20));                      // 20/10, 20/11
+        var luz = await a.Recorrente(TipoLancamento.Despesa, a.Energia, 200, D(2026, 10, 18));
+
+        // Luz de 18/10 ainda pendente: o período de hoje continua aberto.
+        var antes = await a.Previsao.Obter();
+        Assert.False(antes.Periodos[0].Quitado);
+        Assert.Equal(D(2026, 11, 19), antes.Fim);
+
+        var l = await a.Db.Lancamentos.SingleAsync(x => x.RegraId == luz.Id && x.Sequencia == 1);
+        await a.Lancamentos.Confirmar(l.Id, new ConfirmarDto(D(2026, 10, 15), 200, null, null));
+
+        var depois = await a.Previsao.Obter();
+        Assert.True(depois.Periodos[0].Quitado);
+        Assert.Equal(4, depois.Periodos.Count);           // quitado + um mês de pagamentos
+        Assert.Equal(D(2026, 10, 20), depois.Inicio);     // a previsão já começa no próximo pagamento
+        Assert.Equal(D(2026, 12, 6), depois.Fim);         // até antes do salário de dezembro (07/12)
+        Assert.Equal(800, depois.SaldoInicio);
+
+        // Configurável: só até o próximo pagamento e sem pular o período quitado.
+        var cfg = await a.Previsao.SalvarConfig(new ConfigPrevisaoDto(1, false));
+        Assert.Equal(3, cfg.Padrao);
+        var curta = await a.Previsao.Obter();
+        Assert.Single(curta.Periodos);
+        Assert.False(curta.Periodos[0].Quitado);
+        Assert.Equal(D(2026, 10, 19), curta.Fim);
+
+        // Voltar ao padrão.
+        await a.Previsao.SalvarConfig(new ConfigPrevisaoDto(null, true));
+        Assert.Equal(D(2026, 12, 6), (await a.Previsao.Obter()).Fim);
+    }
+
+    [Fact]
+    public async Task Intervalo_escolhido_divide_pelos_pagamentos_dentro_dele()
+    {
+        using var a = new Ambiente();
+        await Salario(a, "Adiantamento", 2000, D(2026, 10, 20));
+        await a.Recorrente(TipoLancamento.Despesa, a.Energia, 200, D(2026, 10, 25));
+
+        var p = await a.Previsao.Obter(de: D(2026, 10, 15), ate: D(2026, 11, 30));
+        Assert.True(p.Personalizado);
+        Assert.Equal([D(2026, 10, 15), D(2026, 10, 20), D(2026, 11, 20)], p.Periodos.Select(x => x.Inicio).ToList());
+        Assert.Equal(D(2026, 11, 30), p.Fim);
+        Assert.Equal(1000 + 2000 * 2 - 200 * 2, p.SaldoFim);
+        await Assert.ThrowsAsync<RegraNegocioException>(() => a.Previsao.Obter(de: D(2026, 11, 1), ate: D(2026, 10, 1)));
     }
 
     [Fact]
@@ -189,18 +249,21 @@ public class NovidadesTests
     }
 
     [Fact]
-    public async Task Vencimentos_vao_ate_o_proximo_salario_e_incluem_faturas()
+    public async Task Vencimentos_seguem_a_janela_da_previsao_e_incluem_faturas()
     {
         using var a = new Ambiente();
         await Salario(a, "Salário", 4000, D(2026, 10, 7), RegraVencimento.DiaUtil, 5);
         await a.Recorrente(TipoLancamento.Despesa, a.Energia, 200, D(2026, 11, 3)); // depois do mês, antes do salário
-        await a.Despesa(300, D(2026, 10, 5), conta: a.Cartao);                    // fatura vence 10/11 (depois do salário)
+        await a.Despesa(300, D(2026, 10, 5), conta: a.Cartao);                    // fatura vence 10/11
         await a.Despesa(50, D(2026, 9, 25), conta: a.Cartao);                     // fatura venceu 10/10
 
+        // Um pagamento por mês (5º dia útil): período atual (07/10 a 08/11) + o seguinte (09/11 a 06/12).
         var r = await a.Resumo.Obter();
+        Assert.Equal(D(2026, 12, 6), r.Previsao.Fim);
         Assert.Contains(r.Alertas, x => x.Descricao == "Energia" && x.Data == D(2026, 11, 3));
         Assert.Contains(r.Alertas, x => x.CartaoId == a.Cartao.Id && x.Tipo == TipoAlerta.Vencido);
-        Assert.DoesNotContain(r.Alertas, x => x.CartaoId == a.Cartao.Id && x.Data == D(2026, 11, 10));
+        Assert.Contains(r.Alertas, x => x.CartaoId == a.Cartao.Id && x.Data == D(2026, 11, 10));
+        Assert.DoesNotContain(r.Alertas, x => x.Data > D(2026, 12, 6));
     }
 
     [Fact]

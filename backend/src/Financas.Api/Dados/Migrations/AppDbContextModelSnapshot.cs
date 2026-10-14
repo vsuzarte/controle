@@ -93,6 +93,22 @@ namespace Financas.Api.Dados.Migrations
                     b.ToTable("Categorias");
                 });
 
+            modelBuilder.Entity("Financas.Api.Dominio.Configuracao", b =>
+                {
+                    b.Property<string>("Chave")
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Valor")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Chave");
+
+                    b.ToTable("Configuracoes");
+                });
+
             modelBuilder.Entity("Financas.Api.Dominio.Conta", b =>
                 {
                     b.Property<Guid>("Id")
@@ -256,6 +272,31 @@ namespace Financas.Api.Dados.Migrations
                         .IsUnique();
 
                     b.ToTable("OrcamentoItens");
+                });
+
+            modelBuilder.Entity("Financas.Api.Dominio.PeriodoSalvo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("Ate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CriadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("De")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("PeriodosSalvos");
                 });
 
             modelBuilder.Entity("Financas.Api.Dominio.Regra", b =>

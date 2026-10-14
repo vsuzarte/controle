@@ -38,7 +38,9 @@ const acoes = [
 
 // ----- Previsão: período de hoje e "livre até o próximo pagamento" -----
 const previsao = computed(() => r.value?.previsao)
-const periodoAtual = computed(() => previsao.value?.periodos.find((p) => p.atual) ?? previsao.value?.periodos[0])
+// Período quitado não conta: "Livre até" e o resumo olham o primeiro período com algo em aberto.
+const periodosAbertos = computed(() => previsao.value?.periodos.filter((p) => !p.quitado) ?? [])
+const periodoAtual = computed(() => periodosAbertos.value.find((p) => p.atual) ?? periodosAbertos.value[0])
 const proximoPagamento = computed(() => (periodoAtual.value ? somarDias(periodoAtual.value.fim, 1) : null))
 
 // ----- Vencimentos até o próximo salário -----
@@ -254,13 +256,13 @@ async function agirAlerta(a: Alerta) {
           <v-card v-if="previsao" class="h-100" data-testid="card-previsao">
             <v-card-item>
               <v-card-title class="font-weight-bold">Previsão</v-card-title>
-              <v-card-subtitle>{{ dataBr(previsao.inicio) }} a {{ dataBr(previsao.fim) }}{{ previsao.porSalario ? ' · entre salários' : '' }}</v-card-subtitle>
+              <v-card-subtitle>{{ dataBr(previsao.inicio) }} a {{ dataBr(previsao.fim) }}{{ previsao.porSalario ? ' · por pagamento' : '' }}</v-card-subtitle>
               <template #append>
                 <v-btn size="small" variant="text" color="primary" to="/previsao" append-icon="mdi-chevron-right">Ver tudo</v-btn>
               </template>
             </v-card-item>
             <v-card-text class="d-flex flex-column ga-3">
-              <v-sheet v-for="p in previsao.periodos" :key="p.inicio" rounded="lg" :color="p.atual ? 'surface-variant' : undefined"
+              <v-sheet v-for="p in periodosAbertos" :key="p.inicio" rounded="lg" :color="p.atual ? 'surface-variant' : undefined"
                 :border="!p.atual" class="pa-3" data-testid="periodo-resumo">
                 <div class="d-flex align-center">
                   <div>

@@ -147,6 +147,23 @@ public class OrcamentoItem : IAuditavel
     public Categoria? Categoria { get; set; }
 }
 
+/// <summary>Intervalo de datas que o usuário salvou para ver na previsão (preferência de tela, pode ser excluído).</summary>
+public class PeriodoSalvo
+{
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+    public string Nome { get; set; } = "";
+    public DateOnly De { get; set; }
+    public DateOnly Ate { get; set; }
+    public DateTime CriadoEm { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>Configuração do usuário (chave/valor). Ex.: até quantos pagamentos à frente a previsão mostra.</summary>
+public class Configuracao
+{
+    public string Chave { get; set; } = "";
+    public string Valor { get; set; } = "";
+}
+
 public class AuditLog
 {
     public long Id { get; set; }

@@ -1,32 +1,121 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { api, qs } from '../api'
-import { confirmarLancamento, erro, estado, pagarFatura } from '../estado'
-import { brl, dataBr, somarDias } from '../formato'
-import type { ItemPrevisao, Lancamento, PeriodoPrevisao, Previsao } from '../tipos'
+import { avisar, confirmarLancamento, erro, estado, pagarFatura } from '../estado'
+import { brl, dataBr, hojeIso, somarDias } from '../formato'
+import type { ConfigPrevisao, ItemPrevisao, Lancamento, PeriodoPrevisao, PeriodoSalvo, Previsao } from '../tipos'
 
-/** Ciclo de salário a salário: o período de hoje, o seguinte e cada conta/entrada de cada um. */
+/**
+ * Previsão por períodos de pagamento. "Automático": o período de hoje e a janela configurada (padrão: um mês de
+ * pagamentos à frente). Ou um período salvo, com datas escolhidas. A escolha fica lembrada neste aparelho.
+ */
 const p = ref<Previsao | null>(null)
 const data = ref<string | null>(null)
-const carregando = ref(false)
+const periodosSalvos = ref<PeriodoSalvo[]>([])
+const lembrada = () => { try { return localStorage.getItem('fin.previsao.selecao') ?? 'auto' } catch { return 'auto' } }
+const selecao = ref<string>(lembrada())
+const salvo = computed(() => periodosSalvos.value.find((x) => x.id === selecao.value))
 
 async function carregar() {
-  carregando.value = true
   try {
-    p.value = await api.get<Previsao>('/previsao' + qs({ data: data.value }))
+    const params = salvo.value ? { de: salvo.value.de, ate: salvo.value.ate } : { data: data.value }
+    p.value = await api.get<Previsao>('/previsao' + qs(params))
   } catch (e) {
     erro(e)
-  } finally {
-    carregando.value = false
   }
 }
-onMounted(carregar)
+async function carregarSalvos() {
+  periodosSalvos.value = await api.get<PeriodoSalvo[]>('/previsao/periodos')
+  if (selecao.value !== 'auto' && !salvo.value) selecao.value = 'auto'
+}
+onMounted(async () => {
+  try { await carregarSalvos() } catch (e) { erro(e) }
+  await carregar()
+})
 watch(() => estado.versao, carregar)
 watch(data, carregar)
+watch(selecao, (v) => {
+  try { localStorage.setItem('fin.previsao.selecao', v) } catch { /* sem storage */ }
+  data.value = null
+  carregar()
+})
 
+const abertos = computed(() => p.value?.periodos.filter((x) => !x.quitado) ?? [])
+const quitados = computed(() => p.value?.periodos.filter((x) => x.quitado) ?? [])
 const anterior = () => { if (p.value) data.value = somarDias(p.value.inicio, -1) }
-const proximo = () => { if (p.value) data.value = somarDias(p.value.fim, 1) }
+// As setas andam um período por vez; a janela mantém o tamanho configurado.
+const proximo = () => { if (p.value) data.value = abertos.value[1]?.inicio ?? somarDias(p.value.fim, 1) }
 const ehHoje = computed(() => !!p.value && p.value.inicio <= p.value.hoje && p.value.hoje <= p.value.fim)
+
+// ----- Período salvo (criar / editar / excluir) -----
+const dlgPeriodo = ref(false)
+const editando = ref<PeriodoSalvo | null>(null)
+const fp = reactive({ nome: '', de: hojeIso(), ate: hojeIso() })
+function novoPeriodo() {
+  editando.value = null
+  Object.assign(fp, { nome: '', de: p.value?.inicio ?? hojeIso(), ate: p.value?.fim ?? hojeIso() })
+  dlgPeriodo.value = true
+}
+function editarPeriodo(x: PeriodoSalvo) {
+  editando.value = x
+  Object.assign(fp, { nome: x.nome, de: x.de, ate: x.ate })
+  dlgPeriodo.value = true
+}
+async function salvarPeriodo() {
+  try {
+    const r = editando.value
+      ? await api.put<PeriodoSalvo>(`/previsao/periodos/${editando.value.id}`, fp)
+      : await api.post<PeriodoSalvo>('/previsao/periodos', fp)
+    dlgPeriodo.value = false
+    await carregarSalvos()
+    if (selecao.value === r.id) await carregar()
+    else selecao.value = r.id
+    avisar('Período salvo')
+  } catch (e) {
+    erro(e)
+  }
+}
+async function excluirPeriodo() {
+  if (!editando.value) return
+  try {
+    await api.del(`/previsao/periodos/${editando.value.id}`)
+    dlgPeriodo.value = false
+    if (selecao.value === editando.value.id) selecao.value = 'auto'
+    await carregarSalvos()
+    avisar('Período excluído')
+  } catch (e) {
+    erro(e)
+  }
+}
+
+// ----- Configuração da janela automática -----
+const dlgConfig = ref(false)
+const cfg = ref<ConfigPrevisao | null>(null)
+const fc = reactive({ ateAntesDoPagamento: 3, pularQuitado: true })
+async function abrirConfig() {
+  try {
+    cfg.value = await api.get<ConfigPrevisao>('/previsao/config')
+    Object.assign(fc, { ateAntesDoPagamento: cfg.value.ateAntesDoPagamento ?? cfg.value.padrao, pularQuitado: cfg.value.pularQuitado })
+    dlgConfig.value = true
+  } catch (e) {
+    erro(e)
+  }
+}
+async function salvarConfig() {
+  if (!cfg.value) return
+  try {
+    const n = Number(fc.ateAntesDoPagamento)
+    cfg.value = await api.put<ConfigPrevisao>('/previsao/config', {
+      ateAntesDoPagamento: n === cfg.value.padrao ? null : n,
+      pularQuitado: fc.pularQuitado,
+    })
+    dlgConfig.value = false
+    estado.versao++
+    avisar(cfg.value.ateHoje ? `Previsão até ${dataBr(cfg.value.ateHoje)}` : 'Configuração salva')
+  } catch (e) {
+    erro(e)
+  }
+}
 
 const GRUPOS = [
   { tipo: 'Entrada', titulo: 'Entradas', icone: 'mdi-cash-plus', cor: 'success' },
@@ -62,18 +151,35 @@ async function agir(i: ItemPrevisao) {
       <div>
         <div class="titulo-pagina">Previsão</div>
         <div class="text-body-2 text-medium-emphasis">
-          {{ p?.porSalario ? 'De um salário ao próximo, dividido em cada pagamento.' : 'Mês inteiro (cadastre seu salário em Contas do mês para dividir por pagamentos).' }}
+          <template v-if="p?.personalizado">Período escolhido por você, dividido pelos pagamentos dentro dele.</template>
+          <template v-else-if="p?.porSalario">Cada pagamento cobre as contas até o pagamento seguinte.</template>
+          <template v-else>Mês inteiro (marque seu salário como "dia de pagamento" em Contas do mês para dividir por pagamentos).</template>
         </div>
       </div>
       <v-spacer />
-      <div class="d-flex align-center ga-1">
-        <v-btn icon="mdi-chevron-left" variant="text" aria-label="Ciclo anterior" @click="anterior" />
+      <div v-if="!salvo" class="d-flex align-center ga-1">
+        <v-btn icon="mdi-chevron-left" variant="text" aria-label="Período anterior" @click="anterior" />
         <v-chip v-if="p" variant="tonal" :color="ehHoje ? 'primary' : undefined" data-testid="ciclo">
           {{ dataBr(p.inicio) }} a {{ dataBr(p.fim) }}
         </v-chip>
-        <v-btn icon="mdi-chevron-right" variant="text" aria-label="Próximo ciclo" @click="proximo" />
-        <v-btn v-if="!ehHoje" variant="text" size="small" @click="data = null">Hoje</v-btn>
+        <v-btn icon="mdi-chevron-right" variant="text" aria-label="Próximo período" @click="proximo" />
+        <v-btn v-if="data" variant="text" size="small" @click="data = null">Hoje</v-btn>
       </div>
+      <v-chip v-else-if="p" variant="tonal" color="primary" data-testid="ciclo">{{ dataBr(p.inicio) }} a {{ dataBr(p.fim) }}</v-chip>
+    </div>
+
+    <!-- ===== Qual período ver ===== -->
+    <div class="d-flex align-center flex-wrap ga-2 mb-4">
+      <v-chip-group v-model="selecao" mandatory selected-class="text-primary" aria-label="Período da previsão">
+        <v-chip value="auto" variant="tonal" filter prepend-icon="mdi-autorenew">Automático</v-chip>
+        <v-chip v-for="x in periodosSalvos" :key="x.id" :value="x.id" variant="tonal" filter data-testid="periodo-salvo">
+          {{ x.nome }}
+          <v-icon size="16" class="ml-1" :aria-label="'Editar ' + x.nome" @click.stop="editarPeriodo(x)">mdi-pencil-outline</v-icon>
+        </v-chip>
+      </v-chip-group>
+      <v-btn variant="text" size="small" prepend-icon="mdi-plus" @click="novoPeriodo">Período</v-btn>
+      <v-spacer />
+      <v-btn variant="tonal" size="small" prepend-icon="mdi-tune-variant" @click="abrirConfig">Configurar</v-btn>
     </div>
 
     <div v-if="!p" class="d-flex justify-center pa-16"><v-progress-circular indeterminate color="primary" /></div>
@@ -99,13 +205,17 @@ async function agir(i: ItemPrevisao) {
           </v-col>
         </v-row>
         <div v-if="p.diaADia" class="text-caption mt-2" style="opacity: 0.85">
-          Gastos do dia a dia já feitos no ciclo (débito/Pix): {{ brl(p.diaADia) }} — já estão no saldo.
+          Gastos do dia a dia já feitos nesses períodos (débito/Pix): {{ brl(p.diaADia) }} — já estão no saldo.
         </div>
       </v-card>
 
+      <v-alert v-for="q in quitados" :key="q.inicio" type="success" variant="tonal" density="compact" class="mb-4" icon="mdi-check-all" data-testid="periodo-quitado">
+        <b>{{ q.titulo }}</b> ({{ dataBr(q.inicio) }} a {{ dataBr(q.fim) }}): tudo pago e recebido. A previsão já mostra os próximos pagamentos.
+      </v-alert>
+
       <!-- ===== Períodos ===== -->
       <v-row>
-        <v-col v-for="per in p.periodos" :key="per.inicio" cols="12" :lg="p.periodos.length > 1 ? 6 : 12">
+        <v-col v-for="per in abertos" :key="per.inicio" cols="12" :lg="abertos.length > 1 ? 6 : 12" :xl="abertos.length > 2 ? 4 : undefined">
           <v-card class="h-100" :class="{ 'opacity-70': per.encerrado }" data-testid="periodo" :aria-label="per.titulo">
             <v-card-item>
               <template #prepend>
@@ -178,5 +288,52 @@ async function agir(i: ItemPrevisao) {
         "Sobra" é o que fica livre para o dia a dia se tudo for pago e recebido como previsto.
       </div>
     </template>
+
+    <v-dialog v-model="dlgPeriodo" max-width="440">
+      <v-card>
+        <v-card-title class="pt-4">{{ editando ? 'Editar período' : 'Novo período' }}</v-card-title>
+        <v-card-text class="d-flex flex-column ga-3">
+          <v-text-field v-model="fp.nome" label="Nome" placeholder="Ex.: Até o salário de dezembro" autofocus />
+          <div class="d-flex ga-3">
+            <v-text-field v-model="fp.de" type="date" label="De" />
+            <v-text-field v-model="fp.ate" type="date" label="Até" />
+          </div>
+          <div class="text-caption text-medium-emphasis">
+            Fica salvo e aparece como opção no PC e no celular. Os pagamentos dentro dele continuam dividindo os períodos.
+          </div>
+        </v-card-text>
+        <v-card-actions>
+          <v-btn v-if="editando" color="error" variant="text" @click="excluirPeriodo">Excluir</v-btn>
+          <v-spacer />
+          <v-btn variant="text" @click="dlgPeriodo = false">Voltar</v-btn>
+          <v-btn color="primary" variant="flat" @click="salvarPeriodo">Salvar</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="dlgConfig" max-width="480">
+      <v-card v-if="cfg">
+        <v-card-title class="pt-4">Configurar a previsão automática</v-card-title>
+        <v-card-text class="d-flex flex-column ga-3">
+          <div class="text-body-2">
+            Os dias de pagamento vêm das entradas marcadas como "dia de pagamento" em Contas do mês
+            (hoje: {{ cfg.pagamentosPorMes }} por mês). Trocou de emprego? Ajuste lá; aqui fica só até onde olhar.
+          </div>
+          <v-text-field v-model.number="fc.ateAntesDoPagamento" type="number" min="1" max="24" data-testid="ate-antes"
+            label="Mostrar tudo que vence até antes do Nº próximo pagamento"
+            :hint="`Padrão: ${cfg.padrao} (o período de hoje e mais um mês de pagamentos).`" persistent-hint />
+          <v-switch v-model="fc.pularQuitado" color="primary" inset hide-details density="compact"
+            label="Quando o período de hoje estiver todo pago, já mostrar o seguinte" />
+          <div v-if="cfg.ateHoje" class="text-caption text-medium-emphasis">
+            Com a configuração salva, hoje a previsão vai até {{ dataBr(cfg.ateHoje) }}. A tela inicial segue a mesma regra.
+          </div>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="dlgConfig = false">Voltar</v-btn>
+          <v-btn color="primary" variant="flat" @click="salvarConfig">Salvar</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
