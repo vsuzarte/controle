@@ -39,10 +39,10 @@ body, .v-application, .v-overlay-container, .v-application [class*='text-'], .v-
 
 /* Layout */
 /* Usa a tela: só limita em monitores muito largos, onde linhas compridas cansam a leitura. */
-.pagina { max-width: 1760px; margin: 0 auto; padding: 24px 28px 120px; }
+.pagina { max-width: 1760px; margin: 0 auto; padding: 20px 28px 28px; }
 .cabecalho { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
 @media (max-width: 600px) {
-  .pagina { padding: 16px 12px 120px; }
+  .pagina { padding: 12px 12px 20px; }
   .grande { font-size: 1.85rem; }
   .titulo-pagina { font-size: 1.4rem; }
 }

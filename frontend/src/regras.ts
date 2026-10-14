@@ -124,3 +124,26 @@ export function quandoCai(vencimento: RegraVencimento, diaUtil: number | null | 
     default: return dia ? `todo dia ${dia}` : 'todo mês'
   }
 }
+
+export type OrdemLancamentos = 'recentes' | 'antigos' | 'valor'
+export interface GrupoLancamentos<T> { chave: string; dia: string | null; itens: T[]; /** Primeiro grupo do que ainda vai acontecer. */ inicioProximos: boolean }
+
+/**
+ * Agrupa lançamentos por dia na ordem escolhida.
+ * "recentes" (padrão): de hoje para trás, e depois os próximos (de amanhã em diante, do mais perto ao mais longe),
+ * para o que acabou de acontecer ficar sempre em cima. "antigos": do começo do mês para o fim. "valor": maiores primeiro, sem dias.
+ */
+export function ordenarLancamentos<T extends { data: string; valor: number }>(lista: T[], ordem: OrdemLancamentos, hoje: string): GrupoLancamentos<T>[] {
+  if (ordem === 'valor') {
+    const itens = [...lista].sort((a, b) => Math.abs(b.valor) - Math.abs(a.valor))
+    return itens.length ? [{ chave: 'valor', dia: null, itens, inicioProximos: false }] : []
+  }
+  const porDia = new Map<string, T[]>()
+  for (const l of lista) porDia.set(l.data, [...(porDia.get(l.data) ?? []), l])
+  const dias = [...porDia.keys()].sort()
+  const ordenados = ordem === 'antigos'
+    ? dias
+    : [...dias.filter((d) => d <= hoje).reverse(), ...dias.filter((d) => d > hoje)]
+  const primeiroFuturo = ordem === 'recentes' ? dias.find((d) => d > hoje) : undefined
+  return ordenados.map((d) => ({ chave: d, dia: d, itens: porDia.get(d)!, inicioProximos: d === primeiroFuturo }))
+}

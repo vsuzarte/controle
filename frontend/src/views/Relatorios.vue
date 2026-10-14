@@ -87,18 +87,14 @@ const opcoes = computed<ChartOptions<'line'>>(() => {
 
 <template>
   <div class="pagina">
-    <div class="cabecalho">
-      <div>
-        <div class="titulo-pagina">Relatórios</div>
-        <div class="text-body-2 text-medium-emphasis">Compare os meses e veja onde os gastos estão aumentando.</div>
-      </div>
+    <div class="d-flex flex-wrap align-center ga-2 mb-4">
+      <SeletorMes v-model="mes" />
       <v-spacer />
       <v-btn-toggle v-model="meses" mandatory density="comfortable" variant="outlined" divided rounded="lg">
         <v-btn :value="3">3 meses</v-btn>
         <v-btn :value="6">6 meses</v-btn>
         <v-btn :value="12">12 meses</v-btn>
       </v-btn-toggle>
-      <SeletorMes v-model="mes" />
     </div>
 
     <div v-if="!c" class="d-flex justify-center pa-16"><v-progress-circular indeterminate color="primary" /></div>

@@ -104,7 +104,8 @@ onMounted(() => {
     <template v-else>
       <!-- ===== Computador: barra lateral ===== -->
       <v-navigation-drawer v-if="mdAndUp" permanent :rail="recolhido" width="240" rail-width="76" color="background" border="0">
-        <v-list-item class="py-6" :class="recolhido ? 'px-4' : 'px-5'">
+        <!-- Logo, ícones do menu e botões de baixo na mesma coluna (aberto: x=32; recolhido: centro do trilho). -->
+        <v-list-item class="py-6 logo" :style="{ paddingInline: recolhido ? '18px' : '12px' }">
           <template #prepend>
             <v-avatar class="destaque" rounded="lg" size="40"><v-icon color="white">mdi-chart-timeline-variant-shimmer</v-icon></v-avatar>
           </template>
@@ -203,3 +204,8 @@ onMounted(() => {
     </v-snackbar>
   </v-app>
 </template>
+
+<style>
+/* Menu recolhido: ícone no centro do trilho de 76px (o padrão do Vuetify deixa 6px para a esquerda). */
+.v-navigation-drawer--rail .v-list .v-list-item { padding-inline: 14px !important; }
+</style>

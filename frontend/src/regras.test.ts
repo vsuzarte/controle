@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calcularParcelas, dataAoMover, dividirParcelas, faltaNoVale, faturaDaCompra, jurosPorPadrao, pagoAMais, passaDoLimite, quandoCai, separarVencimentos, situacaoCard } from './regras'
+import { calcularParcelas, dataAoMover, dividirParcelas, faltaNoVale, faturaDaCompra, jurosPorPadrao, ordenarLancamentos, pagoAMais, passaDoLimite, quandoCai, separarVencimentos, situacaoCard } from './regras'
 import { dataBr, nomeMes, parseValor, somarDias, somarMeses } from './formato'
 import type { Alerta } from './tipos'
 
@@ -135,5 +135,25 @@ describe('quandoCai', () => {
     expect(quandoCai('DiaUtil', 5, null)).toBe('todo 5º dia útil')
     expect(quandoCai('UltimoDiaUtil', null, null)).toBe('todo último dia útil')
     expect(quandoCai('UltimoDia', null, 31)).toBe('todo último dia do mês')
+  })
+})
+
+describe('ordenarLancamentos', () => {
+  const l = (data: string, valor: number) => ({ data, valor })
+  const lista = [l('2026-10-28', 116), l('2026-10-14', 50), l('2026-10-13', 900), l('2026-10-20', 300), l('2026-10-14', 10)]
+
+  it('padrão: hoje e para trás primeiro, depois os próximos do mais perto ao mais longe', () => {
+    const g = ordenarLancamentos(lista, 'recentes', '2026-10-14')
+    expect(g.map((x) => x.dia)).toEqual(['2026-10-14', '2026-10-13', '2026-10-20', '2026-10-28'])
+    expect(g.map((x) => x.inicioProximos)).toEqual([false, false, true, false])
+    expect(g[0].itens).toHaveLength(2)
+  })
+
+  it('mais antigos primeiro e por valor', () => {
+    expect(ordenarLancamentos(lista, 'antigos', '2026-10-14').map((x) => x.dia)).toEqual(['2026-10-13', '2026-10-14', '2026-10-20', '2026-10-28'])
+    const v = ordenarLancamentos(lista, 'valor', '2026-10-14')
+    expect(v).toHaveLength(1)
+    expect(v[0].itens.map((x) => x.valor)).toEqual([900, 300, 116, 50, 10])
+    expect(ordenarLancamentos([], 'valor', '2026-10-14')).toEqual([])
   })
 })
