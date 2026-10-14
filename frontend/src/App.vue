@@ -9,6 +9,7 @@ import { TEMAS, preferenciaTema, proximoTema } from './tema'
 import LancamentoForm from './components/LancamentoForm.vue'
 import ConfirmarDialog from './components/ConfirmarDialog.vue'
 import HistoricoDialog from './components/HistoricoDialog.vue'
+import MoverParcelasDialog from './components/MoverParcelasDialog.vue'
 import PagarFaturaDialog from './components/PagarFaturaDialog.vue'
 
 const { mdAndUp } = useDisplay()
@@ -194,6 +195,7 @@ onMounted(() => {
       <ConfirmarDialog v-if="pronto" />
       <HistoricoDialog v-if="pronto" />
       <PagarFaturaDialog v-if="pronto" />
+      <MoverParcelasDialog v-if="pronto" />
     </template>
 
     <v-snackbar v-model="estado.aviso.mostrar" :color="estado.aviso.cor" timeout="3500" location="top" rounded="lg">

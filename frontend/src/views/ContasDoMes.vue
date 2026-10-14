@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useDisplay } from 'vuetify'
 import { api } from '../api'
-import { alterado, contasAtivas, contasPagadoras, erro, estado, verHistorico } from '../estado'
+import { alterado, contasAtivas, contasPagadoras, erro, estado, moverParcelas, verHistorico } from '../estado'
 import { brl, dataBr, hojeIso } from '../formato'
 import { FORMAS, VENCIMENTOS, type FormaPagamento, type Frequencia, type Regra, type RegraVencimento, type TipoLancamento } from '../tipos'
 import CampoValor from '../components/CampoValor.vue'
@@ -242,6 +242,7 @@ async function reativar(r: Regra) {
                 </template>
                 <v-list density="compact" rounded="lg">
                   <v-list-item prepend-icon="mdi-pencil-outline" title="Editar" @click="editar(r)" />
+                  <v-list-item v-if="r.modo === 'Parcelado'" prepend-icon="mdi-calendar-arrow-right" title="Mover parcelas" @click="moverParcelas(r.id, r.descricao)" />
                   <v-list-item prepend-icon="mdi-history" title="Histórico" @click="verHistorico(r.id, r.descricao)" />
                   <v-list-item
                     prepend-icon="mdi-stop-circle-outline"

@@ -51,4 +51,33 @@ public class ValeTests
         Assert.Equal(StatusLancamento.Realizado,
             (await a.Db.Lancamentos.SingleAsync(l => l.ContaId == vr.Id && l.Data == D(2026, 10, 20))).Status);
     }
+
+    [Fact]
+    public async Task Recarga_cadastrada_pelo_vale_entra_sozinha_na_data_e_pode_mudar_ou_parar()
+    {
+        using var a = new Ambiente();
+        var vr = new Conta { Nome = "VR", Tipo = TipoConta.Beneficio };
+        a.Db.Contas.Add(vr);
+        await a.Db.SaveChangesAsync();
+        await Assert.ThrowsAsync<RegraNegocioException>(() => a.Recargas.Definir(a.Banco.Id, new RecargaDto(500, RegraVencimento.DiaFixo, null, 20)));
+
+        var recarga = await a.Recargas.Definir(vr.Id, new RecargaDto(500, RegraVencimento.DiaFixo, null, 20));
+        Assert.Equal(D(2026, 10, 20), recarga!.Proxima);
+        Assert.Equal(20, recarga.Dia);
+        Assert.Equal("Benefícios", (await a.Db.Categorias.SingleAsync(c => c.Tipo == TipoCategoria.Receita && c.Nome.StartsWith("Benef"))).Nome);
+
+        a.Relogio.Hoje = D(2026, 10, 20);
+        await a.Regras.Sincronizar();
+        Assert.Equal(500, (await a.Contas.Listar()).Single(c => c.Id == vr.Id).Saldo);
+
+        // Passou a cair no último dia útil e com outro valor: só os próximos mudam.
+        recarga = await a.Recargas.Definir(vr.Id, new RecargaDto(600, RegraVencimento.UltimoDiaUtil, null, null));
+        Assert.Equal(D(2026, 11, 30), recarga!.Proxima);
+        Assert.Equal(600, recarga.Valor);
+        Assert.Equal(500, (await a.Contas.Listar()).Single(c => c.Id == vr.Id).Saldo);
+
+        Assert.Null(await a.Recargas.Definir(vr.Id, new RecargaDto(null, RegraVencimento.DiaFixo, null, null)));
+        Assert.Null((await a.Contas.Listar()).Single(c => c.Id == vr.Id).Recarga);
+        Assert.DoesNotContain(await a.Db.Lancamentos.Where(l => l.ContaId == vr.Id).ToListAsync(), l => l.Status == StatusLancamento.Previsto);
+    }
 }

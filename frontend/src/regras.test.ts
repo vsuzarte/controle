@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calcularParcelas, dataAoMover, dividirParcelas, faltaNoVale, faturaDaCompra, jurosPorPadrao, pagoAMais, passaDoLimite, separarVencimentos, situacaoCard } from './regras'
+import { calcularParcelas, dataAoMover, dividirParcelas, faltaNoVale, faturaDaCompra, jurosPorPadrao, pagoAMais, passaDoLimite, quandoCai, separarVencimentos, situacaoCard } from './regras'
 import { dataBr, nomeMes, parseValor, somarDias, somarMeses } from './formato'
 import type { Alerta } from './tipos'
 
@@ -126,5 +126,14 @@ describe('parcelas', () => {
     expect(faturaDaCompra('2026-10-03', 3, 10)).toBe('2026-11') // no dia do fechamento: próxima
     expect(faturaDaCompra('2026-10-15', 20, 28)).toBe('2026-10')
     expect(faturaDaCompra('2026-10-15', 25, 5)).toBe('2026-11') // vence no mês seguinte ao fechamento
+  })
+})
+
+describe('quandoCai', () => {
+  it('descreve o dia da recarga/conta em português', () => {
+    expect(quandoCai('DiaFixo', null, 20)).toBe('todo dia 20')
+    expect(quandoCai('DiaUtil', 5, null)).toBe('todo 5º dia útil')
+    expect(quandoCai('UltimoDiaUtil', null, null)).toBe('todo último dia útil')
+    expect(quandoCai('UltimoDia', null, 31)).toBe('todo último dia do mês')
   })
 })

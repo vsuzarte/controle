@@ -14,6 +14,17 @@ export interface Conta {
   /** Só cartão. */
   limite: number | null
   limiteUsado: number | null
+  /** Só vale: recarga automática cadastrada (null = nenhuma). */
+  recarga: Recarga | null
+}
+
+export interface Recarga {
+  regraId: string
+  valor: number
+  vencimento: RegraVencimento
+  diaUtilNumero: number | null
+  dia: number
+  proxima: string | null
 }
 
 export interface Categoria {

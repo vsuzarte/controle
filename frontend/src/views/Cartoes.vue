@@ -6,7 +6,11 @@ import { alterado, cartoes, erro, estado, pagarFatura, verHistorico } from '../e
 import { brl, dataBr, nomeMes } from '../formato'
 import type { Conta, Fatura, StatusFatura, TodosCartoes } from '../tipos'
 import CampoValor from '../components/CampoValor.vue'
+import ContaDialog from '../components/ContaDialog.vue'
 import LancamentoLinha from '../components/LancamentoLinha.vue'
+
+/** "+ Cartão": o mesmo formulário de conta, já como cartão de crédito. */
+const novoCartao = ref(false)
 
 const route = useRoute()
 const router = useRouter()
@@ -88,14 +92,17 @@ async function salvarLimite() {
     <v-card v-if="!cartoes.length" class="pa-8 text-center">
       <v-icon size="48" class="mb-2">mdi-credit-card-plus-outline</v-icon>
       <div class="mb-3">Nenhum cartão cadastrado.</div>
-      <v-btn color="primary" to="/cadastros">Cadastrar cartão</v-btn>
+      <v-btn color="primary" prepend-icon="mdi-plus" @click="novoCartao = true">Cadastrar cartão</v-btn>
     </v-card>
 
     <template v-else>
-      <v-tabs v-model="aba" color="primary" class="mb-4" show-arrows>
-        <v-tab value="todos" prepend-icon="mdi-credit-card-multiple-outline">Todos</v-tab>
-        <v-tab v-for="c in cartoes" :key="c.id" :value="c.id" prepend-icon="mdi-credit-card">{{ c.nome }}</v-tab>
-      </v-tabs>
+      <div class="d-flex align-center ga-2 mb-4">
+        <v-tabs v-model="aba" color="primary" show-arrows class="flex-grow-1" style="min-width: 0">
+          <v-tab value="todos" prepend-icon="mdi-credit-card-multiple-outline">Todos</v-tab>
+          <v-tab v-for="c in cartoes" :key="c.id" :value="c.id" prepend-icon="mdi-credit-card">{{ c.nome }}</v-tab>
+        </v-tabs>
+        <v-btn color="primary" variant="tonal" prepend-icon="mdi-plus" data-testid="novo-cartao" @click="novoCartao = true">Cartão</v-btn>
+      </div>
 
       <!-- ===== Todos os cartões ===== -->
       <template v-if="aba === 'todos' && todos">
@@ -247,5 +254,7 @@ async function salvarLimite() {
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <ContaDialog v-model="novoCartao" tipo="CartaoCredito" />
   </div>
 </template>

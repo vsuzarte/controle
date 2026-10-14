@@ -10,5 +10,6 @@ public static class RegrasEndpoints
         g.MapPut("/{id:guid}", async (Guid id, EditarRegraDto dto, RegraService s) => (await s.Editar(id, dto)).Id);
         g.MapPost("/{id:guid}/desativar", async (Guid id, DesativarRegraDto dto, RegraService s) => (await s.Desativar(id, dto)).Id);
         g.MapPost("/{id:guid}/reativar", async (Guid id, RegraService s) => (await s.Reativar(id)).Id);
+        g.MapPost("/{id:guid}/mover-parcelas", async (Guid id, MoverParcelasDto dto, RegraService s) => (await s.MoverParcelas(id, dto)).Id);
     }
 }

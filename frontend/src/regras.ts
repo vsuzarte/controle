@@ -1,4 +1,4 @@
-import type { Alerta, ItemPrevisao, PeriodoPrevisao } from './tipos'
+import type { Alerta, ItemPrevisao, PeriodoPrevisao, RegraVencimento } from './tipos'
 
 /**
  * Lógica das telas, separada dos componentes para ter testes unitários (regras.test.ts).
@@ -113,4 +113,14 @@ export function faturaDaCompra(data: string, fechamento: number, vencimento: num
   if (d >= Math.min(fechamento, diasNoMes)) mes = new Date(a, m, 1)
   if (vencimento <= fechamento) mes = new Date(mes.getFullYear(), mes.getMonth() + 1, 1)
   return `${mes.getFullYear()}-${String(mes.getMonth() + 1).padStart(2, '0')}`
+}
+
+/** Quando cai uma entrada/conta mensal, em texto: "todo dia 20", "todo 5º dia útil", "todo último dia útil". */
+export function quandoCai(vencimento: RegraVencimento, diaUtil: number | null | undefined, dia: number | null | undefined) {
+  switch (vencimento) {
+    case 'DiaUtil': return `todo ${diaUtil ?? 1}º dia útil`
+    case 'UltimoDiaUtil': return 'todo último dia útil'
+    case 'UltimoDia': return 'todo último dia do mês'
+    default: return dia ? `todo dia ${dia}` : 'todo mês'
+  }
 }

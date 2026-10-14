@@ -18,6 +18,7 @@ export const estado = reactive({
   confirmar: { aberto: false, lancamento: null as Lancamento | null, valor: null as number | null },
   historico: { aberto: false, entidadeId: '', titulo: '' },
   pagarFatura: { aberto: false, cartaoId: '', cartao: '', mes: '', vencimento: '', restante: 0 },
+  moverParcelas: { aberto: false, regraId: '', descricao: '' },
 })
 
 export const contasAtivas = computed(() => estado.contas.filter((c) => c.ativa))
@@ -63,6 +64,11 @@ export function confirmarLancamento(l: Lancamento, valor: number | null = null) 
 
 export function pagarFatura(f: { cartaoId: string; cartao: string; mes: string; vencimento: string; restante: number }) {
   estado.pagarFatura = { aberto: true, cartaoId: f.cartaoId, cartao: f.cartao, mes: f.mes, vencimento: f.vencimento, restante: f.restante }
+}
+
+/** Compra parcelada no mês errado: abre o diálogo para mover todas as parcelas. */
+export function moverParcelas(regraId: string, descricao: string) {
+  estado.moverParcelas = { aberto: true, regraId, descricao }
 }
 
 export function verHistorico(entidadeId: string, titulo: string) {

@@ -60,6 +60,7 @@ public static class Servicos
     private static void AdicionarFuncionalidades(IServiceCollection s)
     {
         s.AddScoped<SaldoService>();
+        s.AddScoped<RecargaDoVale>();
         s.AddScoped<ContaService>();
         s.AddScoped<CategoriaService>();
         s.AddScoped<GeradorDeOcorrencias>();

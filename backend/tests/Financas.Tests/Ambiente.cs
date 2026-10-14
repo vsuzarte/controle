@@ -17,6 +17,8 @@ public sealed class Ambiente : IDisposable
     public QuadroPrevisaoService Quadro { get; }
     public ConfiguracaoPrevisaoService ConfigPrevisao { get; }
     public RelatorioService Relatorios { get; }
+    public ContaService Contas { get; }
+    public RecargaDoVale Recargas { get; }
 
     public Conta Banco { get; }
     public Conta Poupanca { get; }
@@ -45,6 +47,8 @@ public sealed class Ambiente : IDisposable
         ConfigPrevisao = new ConfiguracaoPrevisaoService(preferencias, dias, Previsao);
         Resumo = new ResumoService(Db, Relogio, saldos, Planejamento, Cartoes, Previsao);
         Relatorios = new RelatorioService(Db);
+        Recargas = new RecargaDoVale(Db, Relogio, Regras);
+        Contas = new ContaService(Db, Relogio, saldos, Cartoes, Recargas);
 
         Banco = new Conta { Nome = "Banco", Tipo = TipoConta.Corrente, SaldoInicial = 1000m };
         Poupanca = new Conta { Nome = "Poupança", Tipo = TipoConta.Poupanca };

@@ -162,6 +162,49 @@ public class RegraService(AppDbContext db, IRelogio relogio, GeradorDeOcorrencia
     }
 
     /// <summary>
+    /// Compra parcelada lançada no mês errado: todas as parcelas andam juntas N meses (data e fatura).
+    /// No cartão, trava se alguma fatura das parcelas já tem pagamento; fora do cartão, se alguma parcela já foi paga.
+    /// </summary>
+    public async Task<Regra> MoverParcelas(Guid id, MoverParcelasDto dto)
+    {
+        var regra = await Obter(id);
+        if (regra.Modo != ModoRegra.Parcelado) throw new RegraNegocioException("Só compras parceladas têm parcelas para mover.");
+        if (dto.Meses is 0 or < -12 or > 12) throw new RegraNegocioException("Escolha mover de 1 a 12 meses.");
+
+        var conta = (await db.Contas.FindAsync(regra.ContaId))!;
+        var parcelas = await db.Lancamentos.Where(l => l.RegraId == id && l.Status != StatusLancamento.Cancelado).ToListAsync();
+        if (conta.EhCartao)
+        {
+            var faturas = parcelas.Where(l => l.FaturaMes != null).Select(l => l.FaturaMes!.Value).Distinct().ToList();
+            var faturaPaga = (await db.Lancamentos
+                    .Where(l => l.Tipo == TipoLancamento.Transferencia && l.Status == StatusLancamento.Realizado
+                                && l.ContaDestinoId == conta.Id && l.FaturaMes != null)
+                    .Select(l => l.FaturaMes!.Value).ToListAsync())
+                .Where(faturas.Contains).Order().FirstOrDefault();
+            if (faturaPaga != default)
+                throw new RegraNegocioException($"A fatura de {faturaPaga:MM/yyyy} já tem pagamento: as parcelas dela não podem mudar de mês.");
+        }
+        else if (parcelas.Any(l => l.Status == StatusLancamento.Realizado))
+        {
+            throw new RegraNegocioException("Esta compra já tem parcelas pagas; corrija as parcelas uma a uma.");
+        }
+
+        regra.DataInicio = regra.DataInicio.AddMonths(dto.Meses);
+        foreach (var l in parcelas)
+        {
+            l.Data = Calendario.Ocorrencia(regra, l.Sequencia ?? 1);
+            if (!conta.EhCartao) continue;
+            l.FaturaMes = l.FaturaMes?.AddMonths(dto.Meses);
+            // No cartão a parcela é cobrada sozinha na data: passada = realizada, futura = prevista.
+            l.Status = l.Data <= Hoje ? StatusLancamento.Realizado : StatusLancamento.Previsto;
+        }
+
+        db.DefinirAuditoria("Parcelas movidas", Validar.Opcional(dto.Motivo) ?? $"{(dto.Meses > 0 ? "+" : "")}{dto.Meses} mês(es)");
+        await db.SaveChangesAsync();
+        return regra;
+    }
+
+    /// <summary>
     /// Garante as ocorrências de todas as regras ativas até a data informada e realiza automaticamente
     /// as cobranças que não dependem do usuário (cartão e débito automático com valor fixo).
     /// </summary>

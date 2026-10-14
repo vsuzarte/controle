@@ -2,7 +2,7 @@ using Financas.Api.Dominio;
 
 namespace Financas.Api.Funcionalidades.Contas;
 
-/// <summary>Conta com o saldo de hoje e, nos cartões, quanto do limite está em uso.</summary>
+/// <summary>Conta com o saldo de hoje; nos cartões, quanto do limite está em uso; nos vales, a recarga.</summary>
 public record ContaView(
     Guid Id,
     string Nome,
@@ -14,4 +14,6 @@ public record ContaView(
     bool Ativa,
     decimal? Limite,
     decimal Saldo,
-    decimal? LimiteUsado);
+    decimal? LimiteUsado,
+    /// <summary>Só vale: a recarga automática (nulo = sem recarga cadastrada).</summary>
+    RecargaView? Recarga = null);

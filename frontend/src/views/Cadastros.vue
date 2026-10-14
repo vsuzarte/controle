@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { api, sessao } from '../api'
+import { PALETA } from '../cores'
 import { alterado, erro, estado, verHistorico } from '../estado'
-import { brl } from '../formato'
+import { brl, dataBr } from '../formato'
+import { quandoCai } from '../regras'
 import { TIPOS_CONTA, type Categoria, type Conta, type TipoCategoria, type TipoConta } from '../tipos'
-import CampoValor from '../components/CampoValor.vue'
+import ContaDialog from '../components/ContaDialog.vue'
 
 const aba = ref('contas')
 
-const PALETA = ['#1E88E5', '#43A047', '#E53935', '#FB8C00', '#8E24AA', '#00ACC1', '#FDD835', '#6D4C41', '#D81B60', '#3949AB', '#546E7A', '#2E7D32']
 const ICONES = [
   'mdi-cart', 'mdi-home', 'mdi-flash', 'mdi-water', 'mdi-wifi', 'mdi-car', 'mdi-gas-station', 'mdi-bus', 'mdi-medical-bag',
   'mdi-pill', 'mdi-silverware-fork-knife', 'mdi-food', 'mdi-gamepad-variant', 'mdi-tshirt-crew', 'mdi-play-box-multiple',
@@ -19,33 +20,24 @@ const ICONES = [
 // ---------- contas ----------
 const contaDlg = ref(false)
 const contaEdit = ref<Conta | null>(null)
-const c = reactive({ nome: '', tipo: 'Corrente' as TipoConta, saldoInicial: 0 as number | null, cor: PALETA[0] as string | null, diaFechamento: null as number | null, diaVencimento: null as number | null, limite: null as number | null, ativa: true })
+const verContasInativas = ref(false)
+const contasVisiveis = computed(() => estado.contas.filter((x) => x.ativa || verContasInativas.value))
+const contasInativas = computed(() => estado.contas.filter((x) => !x.ativa).length)
 
 function abrirConta(conta?: Conta) {
   contaEdit.value = conta ?? null
-  Object.assign(c, conta
-    ? { nome: conta.nome, tipo: conta.tipo, saldoInicial: conta.saldoInicial, cor: conta.cor, diaFechamento: conta.diaFechamento, diaVencimento: conta.diaVencimento, limite: conta.limite, ativa: conta.ativa }
-    : { nome: '', tipo: 'Corrente', saldoInicial: 0, cor: PALETA[0], diaFechamento: null, diaVencimento: null, limite: null, ativa: true })
   contaDlg.value = true
 }
 
-async function salvarConta() {
-  try {
-    const corpo = { ...c, saldoInicial: c.saldoInicial ?? 0 }
-    if (contaEdit.value) await api.put(`/contas/${contaEdit.value.id}`, corpo)
-    else await api.post('/contas', corpo)
-    contaDlg.value = false
-    alterado('Conta salva')
-  } catch (e) {
-    erro(e)
-  }
-}
+const tipoConta = (t: TipoConta) => TIPOS_CONTA.find((x) => x.value === t)
+const usoLimite = (x: Conta) => (x.limite ? Math.min(100, ((x.limiteUsado ?? 0) / x.limite) * 100) : 0)
 
 // ---------- categorias ----------
 const catDlg = ref(false)
 const catEdit = ref<Categoria | null>(null)
 const k = reactive({ nome: '', tipo: 'Despesa' as TipoCategoria, grupo: '' as string | null, cor: PALETA[0] as string | null, icone: 'mdi-tag' as string | null, ativa: true })
 const verInativas = ref(false)
+const categoriasInativas = computed(() => estado.categorias.filter((x) => !x.ativa).length)
 
 const grupos = computed(() => [...new Set(estado.categorias.map((x) => x.grupo).filter(Boolean))] as string[])
 const categoriasPorTipo = computed(() =>
@@ -78,8 +70,6 @@ async function sair() {
   await api.post('/auth/logout')
   sessao.precisaLogin = true
 }
-
-const iconeConta = (t: TipoConta) => TIPOS_CONTA.find((x) => x.value === t)?.icone ?? 'mdi-bank'
 </script>
 
 <template>
@@ -91,48 +81,85 @@ const iconeConta = (t: TipoConta) => TIPOS_CONTA.find((x) => x.value === t)?.ico
     </v-tabs>
 
     <v-window v-model="aba">
+      <!-- ===== Contas em cards ===== -->
       <v-window-item value="contas">
-        <div class="d-flex mb-2"><v-spacer /><v-btn color="primary" prepend-icon="mdi-plus" @click="abrirConta()">Nova conta / cartão</v-btn></div>
-        <v-card>
-          <v-list>
-            <v-list-item v-for="x in estado.contas" :key="x.id" :class="{ 'text-disabled': !x.ativa }" @click="abrirConta(x)">
-              <template #prepend><v-avatar :color="x.cor ?? 'grey'" variant="tonal"><v-icon>{{ iconeConta(x.tipo) }}</v-icon></v-avatar></template>
-              <v-list-item-title>{{ x.nome }} <v-chip v-if="!x.ativa" size="x-small">inativa</v-chip></v-list-item-title>
-              <v-list-item-subtitle>
-                {{ TIPOS_CONTA.find((t) => t.value === x.tipo)?.title }}
-                <template v-if="x.tipo === 'CartaoCredito'"> · fecha dia {{ x.diaFechamento }}, vence dia {{ x.diaVencimento }}<template v-if="x.limite"> · limite {{ brl(x.limite) }}</template></template>
-              </v-list-item-subtitle>
-              <template #append>
-                <span class="valor" :class="x.saldo < 0 ? 'text-error' : ''">{{ brl(x.saldo) }}</span>
-                <v-btn icon="mdi-history" variant="text" size="small" @click.stop="verHistorico(x.id, x.nome)" />
-              </template>
-            </v-list-item>
-          </v-list>
-        </v-card>
-        <div class="text-caption text-medium-emphasis mt-2">
-          No cartão, o saldo negativo é o que você deve (compras lançadas menos pagamentos de fatura).
-        </div>
-      </v-window-item>
-
-      <v-window-item value="categorias">
-        <div class="d-flex mb-2 align-center">
-          <v-switch v-model="verInativas" label="Mostrar inativas" hide-details density="compact" color="primary" />
+        <div class="d-flex flex-wrap align-center ga-2 mb-3">
+          <v-btn v-if="contasInativas" variant="tonal" size="small" :prepend-icon="verContasInativas ? 'mdi-eye-off-outline' : 'mdi-eye-outline'"
+            @click="verContasInativas = !verContasInativas">
+            {{ verContasInativas ? 'Esconder excluídas' : `Mostrar excluídas (${contasInativas})` }}
+          </v-btn>
           <v-spacer />
-          <v-btn color="primary" prepend-icon="mdi-plus" @click="abrirCategoria()">Nova categoria</v-btn>
+          <v-btn color="primary" prepend-icon="mdi-plus" @click="abrirConta()">Nova conta / cartão</v-btn>
         </div>
         <v-row dense>
-          <v-col v-for="g in categoriasPorTipo" :key="g.tipo" cols="12" md="6">
-            <v-card>
-              <v-card-title class="text-subtitle-1 font-weight-bold">{{ g.tipo === 'Despesa' ? 'Despesas' : 'Receitas' }}</v-card-title>
-              <v-list density="comfortable">
-                <v-list-item v-for="x in g.itens" :key="x.id" :class="{ 'text-disabled': !x.ativa }" :subtitle="x.grupo ?? undefined" @click="abrirCategoria(x)">
-                  <template #prepend><v-avatar :color="x.cor ?? 'grey'" variant="tonal" size="34"><v-icon size="18">{{ x.icone ?? 'mdi-tag' }}</v-icon></v-avatar></template>
-                  <v-list-item-title>{{ x.nome }} <v-chip v-if="!x.ativa" size="x-small">inativa</v-chip></v-list-item-title>
-                </v-list-item>
-              </v-list>
+          <v-col v-for="x in contasVisiveis" :key="x.id" cols="12" sm="6" lg="4" xl="3">
+            <v-card class="h-100 d-flex flex-column" :class="{ inativa: !x.ativa }" data-testid="card-conta-cadastro" :aria-label="x.nome" @click="abrirConta(x)">
+              <div class="d-flex align-center ga-3 pa-4 pb-2">
+                <v-avatar :color="x.cor ?? 'grey'" variant="tonal" rounded="lg"><v-icon>{{ tipoConta(x.tipo)?.icone ?? 'mdi-bank' }}</v-icon></v-avatar>
+                <div class="flex-grow-1" style="min-width: 0">
+                  <div class="font-weight-bold text-truncate">{{ x.nome }}</div>
+                  <div class="text-caption text-medium-emphasis">{{ tipoConta(x.tipo)?.title }}</div>
+                </div>
+                <v-chip v-if="!x.ativa" size="x-small" label>excluída</v-chip>
+                <v-btn icon="mdi-history" variant="text" size="small" :aria-label="'Histórico de ' + x.nome" @click.stop="verHistorico(x.id, x.nome)" />
+              </div>
+              <div class="px-4 pb-4 mt-auto">
+                <template v-if="x.tipo === 'CartaoCredito'">
+                  <div class="text-caption text-medium-emphasis">Fecha dia {{ x.diaFechamento }} · vence dia {{ x.diaVencimento }}</div>
+                  <template v-if="x.limite">
+                    <v-progress-linear :model-value="usoLimite(x)" :color="usoLimite(x) > 85 ? 'error' : 'primary'" rounded height="6" class="my-2" />
+                    <div class="d-flex justify-space-between text-caption">
+                      <span>Usado {{ brl(x.limiteUsado ?? 0) }}</span><span>Livre {{ brl(x.limite - (x.limiteUsado ?? 0)) }}</span>
+                    </div>
+                  </template>
+                  <div v-else class="text-caption text-medium-emphasis mt-1">Sem limite cadastrado</div>
+                </template>
+                <template v-else>
+                  <div class="medio" :class="x.saldo < 0 ? 'text-error' : ''">{{ brl(x.saldo) }}</div>
+                  <div v-if="x.tipo === 'Beneficio'" class="text-caption text-medium-emphasis" data-testid="recarga-card">
+                    <template v-if="x.recarga">
+                      Recarga {{ brl(x.recarga.valor) }} {{ quandoCai(x.recarga.vencimento, x.recarga.diaUtilNumero, x.recarga.dia) }}
+                      <template v-if="x.recarga.proxima"> · próxima {{ dataBr(x.recarga.proxima).slice(0, 5) }}</template>
+                    </template>
+                    <template v-else>Sem recarga automática · toque para cadastrar</template>
+                  </div>
+                </template>
+              </div>
             </v-card>
           </v-col>
         </v-row>
+      </v-window-item>
+
+      <!-- ===== Categorias em cards pequenos ===== -->
+      <v-window-item value="categorias">
+        <div class="d-flex flex-wrap align-center ga-2 mb-3">
+          <v-btn v-if="categoriasInativas" variant="tonal" size="small" :prepend-icon="verInativas ? 'mdi-eye-off-outline' : 'mdi-eye-outline'"
+            @click="verInativas = !verInativas">
+            {{ verInativas ? 'Esconder inativas' : `Mostrar inativas (${categoriasInativas})` }}
+          </v-btn>
+          <v-spacer />
+          <v-btn color="primary" prepend-icon="mdi-plus" @click="abrirCategoria()">Nova categoria</v-btn>
+        </div>
+        <div v-for="g in categoriasPorTipo" :key="g.tipo" class="mb-5">
+          <div class="d-flex align-center mb-2">
+            <div class="rotulo">{{ g.tipo === 'Despesa' ? 'Despesas' : 'Receitas' }} · {{ g.itens.length }}</div>
+            <v-spacer />
+            <v-btn variant="text" size="small" prepend-icon="mdi-plus" @click="abrirCategoria(undefined, g.tipo)">
+              {{ g.tipo === 'Despesa' ? 'Despesa' : 'Receita' }}
+            </v-btn>
+          </div>
+          <v-row dense>
+            <v-col v-for="x in g.itens" :key="x.id" cols="6" sm="4" md="3" xl="2">
+              <v-card class="pa-3 d-flex align-center ga-2 h-100" :class="{ inativa: !x.ativa }" data-testid="card-categoria" :aria-label="x.nome" @click="abrirCategoria(x)">
+                <v-avatar :color="x.cor ?? 'grey'" variant="tonal" size="36" rounded="lg"><v-icon size="20">{{ x.icone ?? 'mdi-tag' }}</v-icon></v-avatar>
+                <div style="min-width: 0">
+                  <div class="text-body-2 font-weight-medium text-truncate">{{ x.nome }}</div>
+                  <div class="text-caption text-medium-emphasis text-truncate">{{ x.ativa ? x.grupo ?? '' : 'inativa' }}</div>
+                </div>
+              </v-card>
+            </v-col>
+          </v-row>
+        </div>
       </v-window-item>
 
       <v-window-item value="sistema">
@@ -141,7 +168,7 @@ const iconeConta = (t: TipoConta) => TIPOS_CONTA.find((x) => x.value === t)?.ico
           <ul class="text-body-2 pl-4">
             <li>Ficam num único arquivo SQLite, na pasta <code>dados/</code> ao lado do docker-compose.</li>
             <li>Uma cópia é feita automaticamente todo dia em <code>backups/</code> (mantém os 30 últimos).</li>
-            <li>Nada é apagado: cancelamentos, correções e remoções da previsão ficam no histórico.</li>
+            <li>Nada é apagado: cancelamentos, correções, exclusões e remoções da previsão ficam no histórico.</li>
           </ul>
           <v-btn class="mt-3" variant="tonal" prepend-icon="mdi-history" @click="verHistorico('', 'Últimas alterações')">Ver últimas alterações</v-btn>
         </v-card>
@@ -154,42 +181,7 @@ const iconeConta = (t: TipoConta) => TIPOS_CONTA.find((x) => x.value === t)?.ico
       </v-window-item>
     </v-window>
 
-    <v-dialog v-model="contaDlg" max-width="480">
-      <v-card>
-        <v-card-title class="pt-4">{{ contaEdit ? 'Editar conta' : 'Nova conta' }}</v-card-title>
-        <v-card-text class="d-flex flex-column ga-3">
-          <v-text-field v-model="c.nome" label="Nome" placeholder="Ex.: Nubank, Itaú, Carteira" />
-          <v-select v-model="c.tipo" :items="TIPOS_CONTA" label="Tipo" />
-          <template v-if="c.tipo === 'CartaoCredito'">
-            <div class="d-flex ga-3">
-              <v-text-field v-model.number="c.diaFechamento" type="number" min="1" max="31" label="Dia do fechamento" />
-              <v-text-field v-model.number="c.diaVencimento" type="number" min="1" max="31" label="Dia do vencimento" />
-            </div>
-            <div class="text-caption text-medium-emphasis">Compras a partir do dia do fechamento entram na fatura seguinte.</div>
-            <CampoValor v-model="c.limite" label="Limite (opcional)" livre />
-            <div class="text-caption text-medium-emphasis mt-n2">Mudou o limite no banco? Ajuste aqui ou em Cartões → Ajustar limite.</div>
-          </template>
-          <template v-else>
-            <CampoValor v-model="c.saldoInicial" :label="c.tipo === 'Beneficio' ? 'Saldo atual do vale' : 'Saldo atual (ponto de partida)'" livre />
-            <div v-if="c.tipo === 'Beneficio'" class="text-caption text-medium-emphasis mt-n2">
-              O vale só serve para compras (mercado, restaurante...): não paga contas nem faturas e não entra no saldo disponível.
-              Cadastre a recarga mensal em Contas do mês como uma entrada nesta conta.
-            </div>
-            <div v-else class="text-caption text-medium-emphasis mt-n2">Coloque o saldo de hoje no banco; daqui pra frente o sistema calcula.</div>
-          </template>
-          <div>
-            <div class="text-caption mb-1">Cor</div>
-            <div class="d-flex flex-wrap ga-1">
-              <v-btn v-for="cor in PALETA" :key="cor" :color="cor" icon size="x-small" :variant="c.cor === cor ? 'elevated' : 'flat'" @click="c.cor = cor">
-                <v-icon v-if="c.cor === cor" color="white">mdi-check</v-icon>
-              </v-btn>
-            </div>
-          </div>
-          <v-switch v-if="contaEdit" v-model="c.ativa" label="Ativa" color="primary" hide-details density="compact" />
-        </v-card-text>
-        <v-card-actions><v-spacer /><v-btn variant="text" @click="contaDlg = false">Voltar</v-btn><v-btn color="primary" variant="flat" @click="salvarConta">Salvar</v-btn></v-card-actions>
-      </v-card>
-    </v-dialog>
+    <ContaDialog v-model="contaDlg" :conta="contaEdit" />
 
     <v-dialog v-model="catDlg" max-width="480" scrollable>
       <v-card>
@@ -222,3 +214,7 @@ const iconeConta = (t: TipoConta) => TIPOS_CONTA.find((x) => x.value === t)?.ico
     </v-dialog>
   </div>
 </template>
+
+<style scoped>
+.inativa { opacity: 0.55; }
+</style>

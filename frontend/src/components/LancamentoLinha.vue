@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useDisplay } from 'vuetify'
 import { api } from '../api'
-import { alterado, confirmarLancamento, editarLancamento, erro, verHistorico } from '../estado'
+import { alterado, confirmarLancamento, editarLancamento, erro, moverParcelas, verHistorico } from '../estado'
 import { brl, dataBr, hojeIso, nomeMes } from '../formato'
 import type { Lancamento } from '../tipos'
 import CampoValor from './CampoValor.vue'
@@ -126,6 +126,7 @@ async function executar() {
               @click="abrir('estornar')"
             />
             <v-list-item v-if="!cancelado" prepend-icon="mdi-cancel" title="Cancelar lançamento" base-color="error" @click="abrir('cancelar')" />
+            <v-list-item v-if="!cancelado && l.totalParcelas && l.regraId" prepend-icon="mdi-calendar-arrow-right" title="Mover parcelas" @click="moverParcelas(l.regraId, l.descricao)" />
             <v-list-item prepend-icon="mdi-history" title="Histórico" @click="verHistorico(l.id, l.descricao)" />
           </v-list>
         </v-menu>

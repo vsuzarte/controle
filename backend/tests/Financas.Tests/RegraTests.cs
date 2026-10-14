@@ -87,4 +87,39 @@ public class RegraTests
         Assert.Equal(D(2026, 12, 7), datas[3].Data);
         Assert.Contains(await a.Db.AuditLogs.ToListAsync(), l => l.Motivo == "5º dia útil");
     }
+
+    [Fact]
+    public async Task Mover_parcelas_do_cartao_leva_todas_para_frente_inclusive_a_fatura()
+    {
+        using var a = new Ambiente();
+        // Compra em 15/10 (depois do fechamento do dia 3): 1ª parcela na fatura de novembro.
+        var primeira = await a.Despesa(300, D(2026, 10, 15), conta: a.Cartao, parcelas: 3);
+        var regraId = primeira.RegraId!.Value;
+        Assert.Equal(StatusLancamento.Realizado, primeira.Status);
+
+        await a.Regras.MoverParcelas(regraId, new MoverParcelasDto(1));
+        var parcelas = await a.Db.Lancamentos.Where(l => l.RegraId == regraId).OrderBy(l => l.Sequencia).ToListAsync();
+        Assert.Equal([D(2026, 11, 15), D(2026, 12, 15), D(2027, 1, 15)], parcelas.Select(l => l.Data));
+        Assert.Equal([D(2026, 12, 1), D(2027, 1, 1), D(2027, 2, 1)], parcelas.Select(l => l.FaturaMes!.Value));
+        Assert.All(parcelas, l => Assert.Equal(StatusLancamento.Previsto, l.Status)); // ainda não cobradas
+        Assert.Contains(await a.Db.AuditLogs.ToListAsync(), x => x.Operacao == "Parcelas movidas");
+
+        // Com pagamento numa das faturas, as parcelas ficam onde estão.
+        await a.Cartoes.Pagar(a.Cartao.Id, D(2026, 12, 1), new PagarFaturaDto(a.Banco.Id, 50, D(2026, 10, 15)));
+        var erro = await Assert.ThrowsAsync<RegraNegocioException>(() => a.Regras.MoverParcelas(regraId, new MoverParcelasDto(-1)));
+        Assert.Contains("12/2026", erro.Message);
+    }
+
+    [Fact]
+    public async Task Mover_parcelas_fora_do_cartao_trava_com_parcela_paga()
+    {
+        using var a = new Ambiente();
+        var primeira = await a.Despesa(200, D(2026, 10, 20), parcelas: 2);
+        await a.Regras.MoverParcelas(primeira.RegraId!.Value, new MoverParcelasDto(1));
+        Assert.Equal(D(2026, 11, 20), (await a.Db.Lancamentos.FindAsync(primeira.Id))!.Data);
+
+        await a.Lancamentos.Confirmar(primeira.Id, new ConfirmarDto(D(2026, 10, 15), 100, null, null));
+        await Assert.ThrowsAsync<RegraNegocioException>(() => a.Regras.MoverParcelas(primeira.RegraId!.Value, new MoverParcelasDto(1)));
+        await Assert.ThrowsAsync<RegraNegocioException>(() => a.Regras.MoverParcelas(primeira.RegraId!.Value, new MoverParcelasDto(0)));
+    }
 }
