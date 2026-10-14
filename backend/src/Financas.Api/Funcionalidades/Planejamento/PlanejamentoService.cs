@@ -56,7 +56,9 @@ public class PlanejamentoService(AppDbContext db, IRelogio relogio, RegraService
             .OrderBy(v => v.Dispensado).ThenByDescending(v => v.Considerado).ThenBy(v => v.Categoria)
             .ToList();
 
-        var totalReceitas = receitas.Sum(l => l.Valor);
+        // O vale aparece nas receitas, mas é somado à parte: não é dinheiro que paga contas.
+        var receitasVale = receitas.Where(l => l.Conta!.EhBeneficio).Sum(l => l.Valor);
+        var totalReceitas = receitas.Sum(l => l.Valor) - receitasVale;
         var totalCompromissos = compromissos.Sum(l => l.Valor);
         var totalVariaveis = variaveis.Sum(v => v.Considerado);
 
@@ -66,12 +68,13 @@ public class PlanejamentoService(AppDbContext db, IRelogio relogio, RegraService
             compromissos.Select(LancamentoView.De).ToList(),
             variaveis,
             totalReceitas,
-            receitas.Where(l => l.Status == StatusLancamento.Realizado).Sum(l => l.Valor),
+            receitas.Where(l => l.Status == StatusLancamento.Realizado && !l.Conta!.EhBeneficio).Sum(l => l.Valor),
             totalCompromissos,
             compromissos.Where(l => l.Status == StatusLancamento.Realizado).Sum(l => l.Valor),
             totalVariaveis,
             gastosVariaveis.Values.Sum(),
-            totalReceitas - totalCompromissos - totalVariaveis);
+            totalReceitas + receitasVale - totalCompromissos - totalVariaveis,
+            receitasVale);
     }
 
     /// <summary>

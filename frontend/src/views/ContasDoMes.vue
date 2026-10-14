@@ -30,12 +30,15 @@ const grupos = computed(() => {
   ]
 })
 const inativas = computed(() => regras.value.filter((r) => !r.ativa))
+const vales = computed(() => new Set(estado.contas.filter((c) => c.tipo === 'Beneficio').map((c) => c.id)))
 const totalMensal = computed(() => {
   const mensal = (r: Regra) =>
     r.frequencia === 'Mensal' ? r.valor / r.intervalo : r.frequencia === 'Anual' ? r.valor / 12 / r.intervalo : (r.valor * 52) / 12 / r.intervalo
   const ativas = regras.value.filter((r) => r.ativa && r.modo === 'Recorrente')
   return {
-    entradas: ativas.filter((r) => r.tipo === 'Receita').reduce((s, r) => s + mensal(r), 0),
+    // Recarga do vale é entrada, mas à parte: só serve para compras, não paga contas.
+    entradas: ativas.filter((r) => r.tipo === 'Receita' && !vales.value.has(r.contaId)).reduce((s, r) => s + mensal(r), 0),
+    vale: ativas.filter((r) => r.tipo === 'Receita' && vales.value.has(r.contaId)).reduce((s, r) => s + mensal(r), 0),
     contas: ativas.filter((r) => r.tipo === 'Despesa').reduce((s, r) => s + mensal(r), 0),
   }
 })
@@ -201,6 +204,10 @@ async function reativar(r: Regra) {
       <v-card class="px-4 py-2 d-flex align-center ga-3" variant="tonal" color="success">
         <v-icon>mdi-cash-plus</v-icon>
         <div><div class="rotulo">Entradas por mês</div><div class="font-weight-bold">{{ brl(totalMensal.entradas) }}</div></div>
+      </v-card>
+      <v-card v-if="totalMensal.vale" class="px-4 py-2 d-flex align-center ga-3" variant="tonal" color="warning">
+        <v-icon>mdi-food</v-icon>
+        <div><div class="rotulo">Vale por mês (só compras)</div><div class="font-weight-bold" data-testid="total-vale">{{ brl(totalMensal.vale) }}</div></div>
       </v-card>
       <v-spacer />
       <v-btn variant="tonal" color="success" prepend-icon="mdi-plus" @click="nova('Receita')">Entrada</v-btn>

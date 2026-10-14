@@ -36,6 +36,8 @@ export interface Resumo {
   gastosPorCategoria: { categoriaId: string; categoria: string; cor: string | null; gasto: number; variavel: number; orcado: number | null }[]
   previsao: Previsao
   beneficios: Beneficio[]
+  /** Recargas do vale no mês (fora de entradasMes: só servem para compras). */
+  entradasVale: number
 }
 
 export interface Beneficio {

@@ -34,7 +34,7 @@ public class ResumoService(AppDbContext db, IRelogio relogio, SaldoService saldo
         // Vencimentos: tudo o que está pendente até o próximo salário (no mínimo os próximos 7 dias).
         var limiteAlertas = previsao.Fim > hoje.AddDays(DiasAlerta) ? previsao.Fim : hoje.AddDays(DiasAlerta);
 
-        var doMes = await db.Lancamentos.Include(l => l.Categoria)
+        var doMes = await db.Lancamentos.Include(l => l.Categoria).Include(l => l.Conta)
             .Where(l => l.Status == StatusLancamento.Realizado && l.Tipo != TipoLancamento.Transferencia
                         && l.Data >= inicioMes && l.Data <= fimMes)
             .ToListAsync();
@@ -92,7 +92,7 @@ public class ResumoService(AppDbContext db, IRelogio relogio, SaldoService saldo
             hoje,
             saldoDisponivel,
             saldoContas,
-            doMes.Where(l => l.Tipo == TipoLancamento.Receita).Sum(l => l.Valor),
+            doMes.Where(l => l.Tipo == TipoLancamento.Receita && !l.Conta!.EhBeneficio).Sum(l => l.Valor),
             doMes.Where(l => l.Tipo == TipoLancamento.Despesa).Sum(l => l.Valor),
             alertas.OrderBy(a => a.Data).ToList(),
             faturasAbertas.OrderBy(f => f.Vencimento).ToList(),
@@ -104,7 +104,8 @@ public class ResumoService(AppDbContext db, IRelogio relogio, SaldoService saldo
             plano,
             gastos,
             previsao,
-            await Beneficios(contas.Where(c => c.EhBeneficio).ToList(), saldoContas, hoje));
+            await Beneficios(contas.Where(c => c.EhBeneficio).ToList(), saldoContas, hoje),
+            doMes.Where(l => l.Tipo == TipoLancamento.Receita && l.Conta!.EhBeneficio).Sum(l => l.Valor));
     }
 
     private async Task<List<BeneficioView>> Beneficios(List<Conta> vales, List<SaldoConta> saldos, DateOnly hoje)

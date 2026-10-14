@@ -80,4 +80,28 @@ public class ValeTests
         Assert.Null((await a.Contas.Listar()).Single(c => c.Id == vr.Id).Recarga);
         Assert.DoesNotContain(await a.Db.Lancamentos.Where(l => l.ContaId == vr.Id).ToListAsync(), l => l.Status == StatusLancamento.Previsto);
     }
+
+    [Fact]
+    public async Task Recarga_do_vale_aparece_nas_entradas_mas_somada_a_parte()
+    {
+        using var a = new Ambiente();
+        var vr = new Conta { Nome = "VR", Tipo = TipoConta.Beneficio };
+        a.Db.Contas.Add(vr);
+        await a.Db.SaveChangesAsync();
+        await a.Recargas.Definir(vr.Id, new RecargaDto(500, RegraVencimento.DiaFixo, null, 10)); // 10/11 em diante
+        await a.Lancamentos.Criar(new NovoLancamentoDto(TipoLancamento.Receita, "Recarga avulsa", 300, D(2026, 10, 5),
+            vr.Id, null, a.Salario.Id, null, null, null, null, null));
+        await a.Lancamentos.Criar(new NovoLancamentoDto(TipoLancamento.Receita, "Freela", 1000, D(2026, 10, 6),
+            a.Banco.Id, null, a.Salario.Id, null, null, null, null, null));
+
+        var resumo = await a.Resumo.Obter();
+        Assert.Equal(1000, resumo.EntradasMes); // só dinheiro que paga contas
+        Assert.Equal(300, resumo.EntradasVale);
+
+        var plano = await a.Planejamento.Obter(D(2026, 10, 1));
+        Assert.Equal(2, plano.Receitas.Count);   // o vale continua listado nas receitas
+        Assert.Equal(1000, plano.TotalReceitas);
+        Assert.Equal(300, plano.ReceitasVale);
+        Assert.Equal(1300 - plano.TotalCompromissos - plano.TotalVariaveis, plano.ResultadoPrevisto);
+    }
 }

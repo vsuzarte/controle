@@ -105,6 +105,7 @@ async function agirAlerta(a: Alerta) {
           <v-col cols="6" sm="3">
             <div class="rotulo" style="opacity: 0.8">Entrou no mês</div>
             <div class="medio">{{ brl(r.entradasMes) }}</div>
+            <div v-if="r.entradasVale" class="text-caption" style="opacity: 0.85" data-testid="entrou-vale">+ {{ brl(r.entradasVale) }} no vale (só compras)</div>
           </v-col>
           <v-col cols="6" sm="3">
             <div class="rotulo" style="opacity: 0.8">Gastei no mês</div>
@@ -120,15 +121,16 @@ async function agirAlerta(a: Alerta) {
 
       <!-- ===== Vales ===== -->
       <v-row v-if="r.beneficios.length" dense class="mb-3">
-        <v-col v-for="b in r.beneficios" :key="b.id" cols="12" sm="6">
-          <v-card class="pa-4 d-flex align-center ga-3" data-testid="vale" :aria-label="b.nome">
+        <!-- Todos os vales numa linha só (até 4; acima disso, quebra em linhas de 4). -->
+        <v-col v-for="b in r.beneficios" :key="b.id" cols="12" sm="6" :md="12 / Math.min(4, r.beneficios.length)">
+          <v-card class="pa-3 d-flex align-center ga-3 h-100" data-testid="vale" :aria-label="b.nome">
             <v-avatar :color="b.cor ?? 'warning'" variant="tonal" rounded="lg"><v-icon>mdi-food</v-icon></v-avatar>
             <div class="flex-grow-1">
               <div class="rotulo">{{ b.nome }}</div>
               <div class="medio" :class="b.saldo < 0 ? 'text-error' : ''" data-testid="vale-saldo">{{ brl(b.saldo) }}</div>
               <div class="text-caption text-medium-emphasis">
-                <template v-if="b.proximaRecarga">Recarga {{ dataBr(b.proximaRecarga) }}<template v-if="b.valorRecarga"> ({{ brl(b.valorRecarga) }})</template></template>
-                <template v-if="b.duraAte"> · no ritmo atual dura até {{ dataBr(b.duraAte) }}</template>
+                <template v-if="b.proximaRecarga">Recarga {{ dataBr(b.proximaRecarga).slice(0, 5) }}<template v-if="b.valorRecarga"> · {{ brl(b.valorRecarga) }}</template></template>
+                <template v-if="b.duraAte"> · dura até {{ dataBr(b.duraAte).slice(0, 5) }}</template>
               </div>
             </div>
           </v-card>

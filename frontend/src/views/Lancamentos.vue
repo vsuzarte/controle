@@ -4,7 +4,7 @@ import { useDisplay } from 'vuetify'
 import { api, qs } from '../api'
 import { erro, estado } from '../estado'
 import { brl, dataBr, hojeIso } from '../formato'
-import { ordenarLancamentos, type OrdemLancamentos } from '../regras'
+import { ordenarLancamentos, somarEntradas, type OrdemLancamentos } from '../regras'
 import type { Lancamento } from '../tipos'
 import LancamentoLinha from '../components/LancamentoLinha.vue'
 import SeletorMes from '../components/SeletorMes.vue'
@@ -46,13 +46,20 @@ let espera: ReturnType<typeof setTimeout>
 watch(() => [estado.mes, estado.versao, filtros.contaId, filtros.categoriaId, filtros.status], carregar)
 watch(() => filtros.busca, () => { clearTimeout(espera); espera = setTimeout(carregar, 300) })
 
+/** Vales (VR/VA): a recarga aparece nas entradas, mas somada à parte. */
+const vales = computed(() => new Set(estado.contas.filter((c) => c.tipo === 'Beneficio').map((c) => c.id)))
 const visiveis = computed(() => lista.value.filter((l) => verCancelados.value || l.status !== 'Cancelado'))
 const montar = (tipo: Lancamento['tipo']) => {
   const itens = visiveis.value.filter((l) => l.tipo === tipo)
   return {
     grupos: ordenarLancamentos(itens, ordem.value, hojeIso()),
     quantidade: itens.length,
-    total: itens.filter((l) => l.status !== 'Cancelado').reduce((s, l) => s + l.valor, 0),
+    ...(() => {
+      const validos = itens.filter((l) => l.status !== 'Cancelado')
+      if (tipo !== 'Receita') return { total: validos.reduce((s, l) => s + l.valor, 0), vale: 0 }
+      const e = somarEntradas(validos, vales.value)
+      return { total: e.dinheiro, vale: e.vale }
+    })(),
   }
 }
 const secoes = computed(() => [
@@ -68,7 +75,8 @@ const colunas = computed(() => lgAndUp.value
 const totais = computed(() => {
   const ok = lista.value.filter((l) => l.status === 'Realizado')
   return {
-    entradas: ok.filter((l) => l.tipo === 'Receita').reduce((s, l) => s + l.valor, 0),
+    entradas: somarEntradas(ok.filter((l) => l.tipo === 'Receita'), vales.value).dinheiro,
+    vale: somarEntradas(ok.filter((l) => l.tipo === 'Receita'), vales.value).vale,
     saidas: ok.filter((l) => l.tipo === 'Despesa').reduce((s, l) => s + l.valor, 0),
     previsto: lista.value.filter((l) => l.status === 'Previsto' && l.tipo === 'Despesa').reduce((s, l) => s + l.valor, 0),
   }
@@ -89,6 +97,7 @@ const opcoesCategorias = computed(() => estado.categorias.map((c) => ({ title: `
         { rotulo: 'Entrou', valor: totais.entradas, cor: 'success' },
         { rotulo: 'Gastei', valor: totais.saidas, cor: 'error' },
         { rotulo: 'A pagar', valor: totais.previsto, cor: 'warning' },
+        ...(totais.vale ? [{ rotulo: 'Vale', valor: totais.vale, cor: 'amber-darken-2' }] : []),
       ]" :key="t.rotulo" :color="t.cor" variant="tonal" label>
         <span class="text-caption mr-2">{{ t.rotulo }}</span><span class="valor">{{ brl(t.valor) }}</span>
       </v-chip>
@@ -136,7 +145,10 @@ const opcoesCategorias = computed(() => estado.categorias.map((c) => ({ title: `
             <div class="font-weight-bold">{{ s.titulo }}</div>
             <span class="text-caption text-medium-emphasis">{{ s.quantidade }}</span>
             <v-spacer />
-            <span class="valor" :class="'text-' + s.cor">{{ brl(s.total) }}</span>
+            <div class="text-right">
+              <div class="valor" :class="'text-' + s.cor">{{ brl(s.total) }}</div>
+              <div v-if="s.vale" class="text-caption text-medium-emphasis" data-testid="entradas-vale">+ {{ brl(s.vale) }} no vale (só compras)</div>
+            </div>
           </div>
           <div v-if="!s.grupos.length" class="text-body-2 text-medium-emphasis pa-6 text-center">Nada neste mês.</div>
           <template v-for="g in s.grupos" :key="g.chave">

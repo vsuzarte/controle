@@ -27,4 +27,6 @@ export interface Planejamento {
   totalVariaveis: number
   gastoVariavel: number
   resultadoPrevisto: number
+  /** Recargas do vale no mês (fora de totalReceitas). */
+  receitasVale: number
 }

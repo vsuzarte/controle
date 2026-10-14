@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calcularParcelas, dataAoMover, dividirParcelas, faltaNoVale, faturaDaCompra, jurosPorPadrao, ordenarLancamentos, pagoAMais, passaDoLimite, quandoCai, separarVencimentos, situacaoCard } from './regras'
+import { calcularParcelas, dataAoMover, dividirParcelas, faltaNoVale, faturaDaCompra, jurosPorPadrao, ordenarLancamentos, pagoAMais, passaDoLimite, quandoCai, separarVencimentos, situacaoCard, somarEntradas } from './regras'
 import { dataBr, nomeMes, parseValor, somarDias, somarMeses } from './formato'
 import type { Alerta } from './tipos'
 
@@ -155,5 +155,13 @@ describe('ordenarLancamentos', () => {
     expect(v).toHaveLength(1)
     expect(v[0].itens.map((x) => x.valor)).toEqual([900, 300, 116, 50, 10])
     expect(ordenarLancamentos([], 'valor', '2026-10-14')).toEqual([])
+  })
+})
+
+describe('somarEntradas', () => {
+  it('separa o vale do dinheiro que paga contas', () => {
+    const vales = new Set(['vr'])
+    expect(somarEntradas([{ valor: 5200, contaId: 'banco' }, { valor: 520, contaId: 'vr' }, { valor: 0.1, contaId: 'banco' }], vales))
+      .toEqual({ dinheiro: 5200.1, vale: 520 })
   })
 })

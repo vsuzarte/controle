@@ -125,6 +125,17 @@ export function quandoCai(vencimento: RegraVencimento, diaUtil: number | null | 
   }
 }
 
+/** Entradas separadas: dinheiro que paga contas e vale (só compras). */
+export function somarEntradas<T extends { valor: number; contaId: string }>(lista: T[], vales: Set<string>) {
+  let dinheiro = 0
+  let vale = 0
+  for (const l of lista) {
+    if (vales.has(l.contaId)) vale += l.valor
+    else dinheiro += l.valor
+  }
+  return { dinheiro: centavos(dinheiro), vale: centavos(vale) }
+}
+
 export type OrdemLancamentos = 'recentes' | 'antigos' | 'valor'
 export interface GrupoLancamentos<T> { chave: string; dia: string | null; itens: T[]; /** Primeiro grupo do que ainda vai acontecer. */ inicioProximos: boolean }
 

@@ -102,7 +102,7 @@ const categoriasDisponiveis = computed(() =>
     <template v-if="p">
       <v-card class="pa-4 mb-3">
         <v-row dense>
-          <v-col cols="6" md="3"><div class="rotulo">Receitas</div><div class="valor text-success text-h6">{{ brl(p.totalReceitas) }}</div><div class="text-caption">{{ brl(p.receitasRecebidas) }} recebido</div></v-col>
+          <v-col cols="6" md="3"><div class="rotulo">Receitas</div><div class="valor text-success text-h6">{{ brl(p.totalReceitas) }}</div><div class="text-caption">{{ brl(p.receitasRecebidas) }} recebido</div><div v-if="p.receitasVale" class="text-caption text-warning">+ {{ brl(p.receitasVale) }} no vale (só compras)</div></v-col>
           <v-col cols="6" md="3"><div class="rotulo">Fixas e parcelas</div><div class="valor text-h6">{{ brl(p.totalCompromissos) }}</div><div class="text-caption">{{ brl(p.compromissosPagos) }} pago</div></v-col>
           <v-col cols="6" md="3"><div class="rotulo">Variáveis</div><div class="valor text-h6">{{ brl(p.totalVariaveis) }}</div><div class="text-caption">{{ brl(p.gastoVariavel) }} gasto</div></v-col>
           <v-col cols="6" md="3">

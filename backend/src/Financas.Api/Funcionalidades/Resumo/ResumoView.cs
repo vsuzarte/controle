@@ -8,6 +8,7 @@ public record ResumoView(
     DateOnly Hoje,
     decimal SaldoDisponivel,
     List<SaldoConta> Contas,
+    /// <summary>Entradas em dinheiro (sem recargas do vale, que ficam em EntradasVale).</summary>
     decimal EntradasMes,
     decimal SaidasMes,
     List<Alerta> Alertas,
@@ -20,4 +21,5 @@ public record ResumoView(
     PlanejamentoView Planejamento,
     List<GastoCategoria> GastosPorCategoria,
     PrevisaoView Previsao,
-    List<BeneficioView> Beneficios);
+    List<BeneficioView> Beneficios,
+    decimal EntradasVale = 0);
