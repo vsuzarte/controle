@@ -198,6 +198,14 @@ public class NotaFiscalTests
 
         // Vários meses: do mês escolhido para trás até "desde".
         Assert.Equal(3, (await busca.Listar("2026-10", null, null, null, null, "coca", D(2026, 1, 1))).Count);
+        // Sem diferenciar acento e maiúscula, nos dois sentidos: "pão" acha "PAO FRANCES" da nota e "PAO" acha "Pão de queijo".
+        await a.Lancamentos.Criar(new NovoLancamentoDto(TipoLancamento.Despesa, "Pão de queijo", 6m, D(2026, 10, 9),
+            a.Banco.Id, null, a.Lazer.Id, FormaPagamento.Pix, null, null, null, null));
+        var pao = await busca.Listar("2026-10", null, null, null, null, "pão");
+        Assert.Equal(2, pao.Count);
+        Assert.Equal("PAO FRANCES KG", pao.Single(l => l.CompraId != null).ItensEncontrados!.Single().Descricao);
+        Assert.Equal(2, (await busca.Listar("2026-10", null, null, null, null, "  PAO ")).Count);
+
         // Sem busca, nada muda: o lançamento vem sem a lista de itens.
         Assert.All(await busca.Listar("2026-10", null, null, null, null, null), l => Assert.Null(l.ItensEncontrados));
     }

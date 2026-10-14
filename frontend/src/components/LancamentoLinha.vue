@@ -4,7 +4,7 @@ import { useDisplay } from 'vuetify'
 import { api } from '../api'
 import { alterado, confirmarLancamento, editarLancamento, erro, moverParcelas, verCompra, verHistorico } from '../estado'
 import { brl, dataBr, hojeIso, nomeMes } from '../formato'
-import type { Lancamento } from '../tipos'
+import type { Compra, ItemCompra, Lancamento } from '../tipos'
 import CampoValor from './CampoValor.vue'
 
 const props = defineProps<{ l: Lancamento; mostrarData?: boolean }>()
@@ -15,6 +15,21 @@ const motivo = ref('')
 const valorEstorno = ref<number | null>(null)
 const dataEstorno = ref(hojeIso())
 const salvando = ref(false)
+
+// Itens da nota fiscal abertos direto na linha (setinha). Só os desta categoria: a nota vira um lançamento por categoria.
+const verItens = ref(false)
+const itensNota = ref<ItemCompra[] | null>(null)
+async function alternarItens() {
+  verItens.value = !verItens.value
+  if (!verItens.value || itensNota.value || !props.l.compraId) return
+  try {
+    const compra = await api.get<Compra>(`/compras/${props.l.compraId}`)
+    itensNota.value = compra.itens.filter((i) => i.categoriaId === props.l.categoriaId)
+  } catch (e) {
+    erro(e)
+    verItens.value = false
+  }
+}
 
 const cancelado = computed(() => props.l.status === 'Cancelado')
 const previsto = computed(() => props.l.status === 'Previsto')
@@ -91,10 +106,21 @@ async function executar() {
       <v-icon size="13">mdi-receipt-text-outline</v-icon>
       {{ i.descricao }} · {{ i.quantidade.toLocaleString('pt-BR', { maximumFractionDigits: 3 }) }} {{ i.unidade?.toLowerCase() }} · {{ brl(i.valorPago) }}
     </div>
+    <div v-if="verItens" class="itens-nota mt-2" data-testid="itens-da-linha" @click.stop>
+      <v-progress-linear v-if="!itensNota" indeterminate color="primary" height="2" />
+      <div v-for="i in itensNota ?? []" :key="i.sequencia" class="item-nota d-flex align-center ga-2 py-1 text-body-2">
+        <span class="flex-grow-1 text-truncate">{{ i.descricao }}</span>
+        <span class="text-caption text-medium-emphasis text-no-wrap">{{ i.quantidade.toLocaleString('pt-BR', { maximumFractionDigits: 3 }) }} {{ i.unidade?.toLowerCase() }} × {{ brl(i.valorUnitario) }}</span>
+        <span class="valor text-no-wrap" style="min-width: 80px; text-align: right">{{ brl(i.valorPago) }}</span>
+      </div>
+    </div>
     <v-list-item-subtitle v-if="cancelado && l.motivoCancelamento" class="font-italic">{{ l.motivoCancelamento }}</v-list-item-subtitle>
 
     <template #append>
       <div class="d-flex align-center ga-2">
+        <v-btn v-if="l.compraId" :icon="verItens ? 'mdi-chevron-up' : 'mdi-chevron-down'" variant="text" size="small" density="comfortable"
+          :title="verItens ? 'Esconder itens da nota' : 'Ver itens da nota'" :aria-label="(verItens ? 'Esconder' : 'Ver') + ' itens da nota de ' + l.descricao"
+          data-testid="abrir-itens" @click.stop="alternarItens" />
         <div class="d-flex flex-column align-end">
           <span class="valor" :class="corValor">{{ sinal < 0 ? '−' : sinal > 0 ? '+' : '' }}{{ brl(Math.abs(l.valor)) }}</span>
           <v-chip v-if="atrasado" size="x-small" color="error" variant="tonal" label>atrasado</v-chip>
@@ -177,3 +203,8 @@ async function executar() {
     </v-card>
   </v-dialog>
 </template>
+
+<style scoped>
+.itens-nota { border-left: 3px solid rgba(var(--v-theme-primary), 0.5); padding-left: 10px; max-width: 640px; cursor: default; }
+.item-nota + .item-nota { border-top: 1px dashed rgba(var(--v-border-color), 0.2); }
+</style>

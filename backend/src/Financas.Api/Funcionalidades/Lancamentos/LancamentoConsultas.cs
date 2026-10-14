@@ -26,19 +26,22 @@ public class LancamentoConsultas(AppDbContext db, IRelogio relogio, RegraService
         if (categoriaId is { } cat) q = q.Where(l => l.CategoriaId == cat);
         if (tipo is { } t) q = q.Where(l => l.Tipo == t);
         if (status is { } s) q = q.Where(l => l.Status == s);
-        var texto = string.IsNullOrWhiteSpace(busca) ? null : $"%{busca.Trim()}%";
-        // A busca olha a descrição do lançamento e também os itens das notas fiscais (ex.: "coca" acha a compra do mercado).
-        if (texto is not null)
-            q = q.Where(l => EF.Functions.Like(l.Descricao, texto)
-                             || db.ItensCompra.Any(i => i.LancamentoId == l.Id && EF.Functions.Like(i.Descricao, texto)));
-        var lista = await q.OrderByDescending(l => l.Data).ThenByDescending(l => l.CriadoEm).Take(2000).ToListAsync();
-        if (texto is null) return lista.Select(LancamentoView.De).ToList();
+        if (string.IsNullOrWhiteSpace(busca))
+        {
+            var todos = await q.OrderByDescending(l => l.Data).ThenByDescending(l => l.CriadoEm).Take(2000).ToListAsync();
+            return todos.Select(LancamentoView.De).ToList();
+        }
 
-        var ids = lista.Where(l => l.CompraId != null).Select(l => l.Id).ToList();
-        var itens = (await db.ItensCompra.Where(i => i.LancamentoId != null && ids.Contains(i.LancamentoId.Value) && EF.Functions.Like(i.Descricao, texto))
-                .OrderBy(i => i.Sequencia).ToListAsync())
+        // Busca sem diferenciar acento e maiúscula ("pão" acha "PAO FRANCES" da nota), na descrição do lançamento e nos
+        // itens das notas fiscais. Feita na memória: o SQLite não ignora acentos e o volume de um mês/ano é pequeno.
+        var termo = Texto.Normalizar(busca);
+        var candidatos = await q.OrderByDescending(l => l.Data).ThenByDescending(l => l.CriadoEm).ToListAsync();
+        var ids = candidatos.Where(l => l.CompraId != null).Select(l => l.Id).ToList();
+        var itens = (await db.ItensCompra.Where(i => i.LancamentoId != null && ids.Contains(i.LancamentoId.Value)).OrderBy(i => i.Sequencia).ToListAsync())
+            .Where(i => Texto.Normalizar(i.Descricao).Contains(termo))
             .GroupBy(i => i.LancamentoId!.Value)
             .ToDictionary(g => g.Key, g => g.Select(i => new ItemEncontradoView(i.Descricao, i.Quantidade, i.Unidade, i.ValorPago)).ToList());
+        var lista = candidatos.Where(l => Texto.Normalizar(l.Descricao).Contains(termo) || itens.ContainsKey(l.Id)).Take(2000).ToList();
         return lista.Select(l => LancamentoView.De(l) with { ItensEncontrados = itens.GetValueOrDefault(l.Id) }).ToList();
     }
 
