@@ -28,7 +28,9 @@ public record ItemPrevisao(
     string? PagoCom = null,
     DateOnly? PagarEm = null,
     /// <summary>Quantos dias depois do prazo sem juros a conta seria paga com esse dinheiro (risco de multa).</summary>
-    int? DiasDepoisDoVencimento = null);
+    int? DiasDepoisDoVencimento = null,
+    /// <summary>Movida à mão no quadro (só esta ocorrência).</summary>
+    bool Movido = false);
 
 public record PeriodoPrevisao(
     DateOnly Inicio,
@@ -111,6 +113,44 @@ public class PrevisaoService(AppDbContext db, IRelogio relogio, RegraService reg
         var quantos = Math.Min(fronteiras.Count - 1, ateAntesDo + 1);
         return await Montar(fronteiras.Take(quantos).ToList(), fronteiras[quantos].AddDays(-1), pagamentos, porSalario: true,
             pularQuitados: data is null && config.PularQuitado, visiveis: ateAntesDo);
+    }
+
+    // ---------- Quadro: mover conta/fatura para outro período ----------
+
+    /// <summary>
+    /// Planeja pagar uma conta (só esta ocorrência) ou fatura em outra data. Sem data, volta ao automático.
+    /// Só muda a previsão: o lançamento, o vencimento e o saldo não são tocados.
+    /// </summary>
+    public async Task Mover(MoverDto dto)
+    {
+        PagamentoPlanejado? atual;
+        if (dto.LancamentoId is { } id)
+        {
+            var l = await db.Lancamentos.Include(x => x.Conta).SingleOrDefaultAsync(x => x.Id == id)
+                    ?? throw new RegraNegocioException("Conta não encontrada.");
+            if (l.Status != StatusLancamento.Previsto || l.Tipo != TipoLancamento.Despesa || !l.Conta!.EhDisponivel)
+                throw new RegraNegocioException("Só contas ainda não pagas podem ser movidas.");
+            atual = await db.PagamentosPlanejados.SingleOrDefaultAsync(p => p.LancamentoId == id);
+            atual ??= dto.PagarEm is null ? null : db.PagamentosPlanejados.Add(new PagamentoPlanejado { LancamentoId = id }).Entity;
+        }
+        else if (dto.CartaoId is { } cartao && dto.FaturaMes is { } mes)
+        {
+            mes = Calendario.InicioMes(mes);
+            var fatura = await cartoes.Fatura(cartao, mes);
+            if (fatura.Restante <= 0) throw new RegraNegocioException("Esta fatura já está paga.");
+            atual = await db.PagamentosPlanejados.SingleOrDefaultAsync(p => p.CartaoId == cartao && p.FaturaMes == mes);
+            atual ??= dto.PagarEm is null ? null : db.PagamentosPlanejados.Add(new PagamentoPlanejado { CartaoId = cartao, FaturaMes = mes }).Entity;
+        }
+        else throw new RegraNegocioException("Informe a conta ou a fatura.");
+
+        if (atual is null) return;
+        if (dto.PagarEm is { } data)
+        {
+            atual.PagarEm = data;
+            atual.AtualizadoEm = DateTime.UtcNow;
+        }
+        else db.PagamentosPlanejados.Remove(atual);
+        await db.SaveChangesAsync();
     }
 
     // ---------- Configuração da janela ----------
@@ -248,7 +288,9 @@ public class PrevisaoService(AppDbContext db, IRelogio relogio, RegraService reg
         List<Lancamento> Lancamentos,
         List<(FaturaView Fatura, string? Cor)> Faturas,
         HashSet<Guid> Disponiveis,
-        Dictionary<Guid, List<DiaPagamento>> Pagamentos);
+        Dictionary<Guid, List<DiaPagamento>> Pagamentos,
+        Dictionary<Guid, DateOnly> MovidosConta,
+        Dictionary<(Guid, DateOnly), DateOnly> MovidosFatura);
 
     private async Task<Dados> Carregar(DateOnly de, DateOnly ate)
     {
@@ -289,7 +331,10 @@ public class PrevisaoService(AppDbContext db, IRelogio relogio, RegraService reg
 
         var pagamentos = (await DiasDePagamento(ate.AddMonths(-6), ate.AddMonths(2)))
             .GroupBy(p => p.RegraId).ToDictionary(g => g.Key, g => g.ToList());
-        return new Dados(saldoHoje, SaldoReal, lancamentos, faturas, disponiveis, pagamentos);
+        var planejados = await db.PagamentosPlanejados.ToListAsync();
+        return new Dados(saldoHoje, SaldoReal, lancamentos, faturas, disponiveis, pagamentos,
+            planejados.Where(p => p.LancamentoId != null).ToDictionary(p => p.LancamentoId!.Value, p => p.PagarEm),
+            planejados.Where(p => p.CartaoId != null && p.FaturaMes != null).ToDictionary(p => (p.CartaoId!.Value, p.FaturaMes!.Value), p => p.PagarEm));
     }
 
     /// <summary>Saldo do dinheiro disponível no fim do dia informado (real no passado, projetado do hoje em diante).</summary>
@@ -298,7 +343,7 @@ public class PrevisaoService(AppDbContext db, IRelogio relogio, RegraService reg
         if (data < Hoje) return d.SaldoReal(data);
         var pendentes = d.Lancamentos.Where(l => l.Status == StatusLancamento.Previsto && Pagavel(d, l).Data <= data)
             .Sum(l => l.Tipo == TipoLancamento.Receita ? l.Valor : -l.Valor);
-        var faturas = d.Faturas.Where(f => f.Fatura.Restante > 0 && Calendario.ProximoDiaUtil(f.Fatura.Vencimento) <= data)
+        var faturas = d.Faturas.Where(f => f.Fatura.Restante > 0 && PagavelFatura(d, f.Fatura).Data <= data)
             .Sum(f => f.Fatura.Restante);
         return d.SaldoHoje + pendentes - faturas;
     }
@@ -318,11 +363,20 @@ public class PrevisaoService(AppDbContext db, IRelogio relogio, RegraService reg
     private static (DateOnly Data, DiaPagamento? Pagamento) Pagavel(Dados d, Lancamento l)
     {
         var prazo = PrazoSemJuros(l);
+        // Movida à mão no quadro vale mais que a regra da conta (só esta ocorrência).
+        if (l.Status == StatusLancamento.Previsto && d.MovidosConta.TryGetValue(l.Id, out var movida)) return (movida, null);
         if (l.Status != StatusLancamento.Previsto || l.Tipo != TipoLancamento.Despesa
             || l.Regra?.PagoComRegraId is not { } id || !d.Pagamentos.TryGetValue(id, out var dias) || dias.Count == 0)
             return (prazo, null);
         var maisProximo = dias.OrderBy(p => Math.Abs(p.Data.DayNumber - prazo.DayNumber)).ThenBy(p => p.Data).First();
         return (maisProximo.Data, maisProximo);
+    }
+
+    /// <summary>Fatura em aberto: no prazo sem juros (próximo dia útil do vencimento) ou na data em que foi movida.</summary>
+    private static (DateOnly Data, bool Movida) PagavelFatura(Dados d, FaturaView f)
+    {
+        if (f.Restante <= 0) return (f.Vencimento, false);
+        return d.MovidosFatura.TryGetValue((f.CartaoId, f.Mes), out var movida) ? (movida, true) : (Calendario.ProximoDiaUtil(f.Vencimento), false);
     }
 
     private PeriodoPrevisao MontarPeriodo(Dados d, DateOnly inicio, DateOnly fim, string titulo)
@@ -337,6 +391,7 @@ public class PrevisaoService(AppDbContext db, IRelogio relogio, RegraService reg
             var pendente = l.Status == StatusLancamento.Previsto;
             var prazo = PrazoSemJuros(l);
             var (pagavel, pagamento) = Pagavel(d, l);
+            var movido = pendente && d.MovidosConta.ContainsKey(l.Id);
             if (!Entra(pagavel, pendente)) continue;
             if (l.Tipo == TipoLancamento.Despesa && !l.Programado) continue;
             itens.Add(new ItemPrevisao(
@@ -344,17 +399,20 @@ public class PrevisaoService(AppDbContext db, IRelogio relogio, RegraService reg
                 l.Descricao, l.Categoria?.Nome, l.Categoria?.Cor, l.Categoria?.Icone, l.Data, l.Valor,
                 pendente ? 0 : l.Valor, pendente, pendente && prazo < Hoje,
                 l.Id, l.RegraId, null, null, l.Juros, prazo != l.Data ? prazo : null,
-                pagamento?.Nome, pagamento?.Data,
-                pagamento is not null && pagavel > prazo ? pagavel.DayNumber - prazo.DayNumber : null));
+                pagamento?.Nome, pagamento?.Data ?? (movido ? pagavel : null),
+                (pagamento is not null || movido) && pagavel > prazo ? pagavel.DayNumber - prazo.DayNumber : null,
+                movido));
         }
         foreach (var (f, cor) in d.Faturas)
         {
             var pendente = f.Restante > 0;
-            var pagavel = pendente ? Calendario.ProximoDiaUtil(f.Vencimento) : f.Vencimento;
+            var prazo = pendente ? Calendario.ProximoDiaUtil(f.Vencimento) : f.Vencimento;
+            var (pagavel, movida) = PagavelFatura(d, f);
             if (!Entra(pagavel, pendente)) continue;
             itens.Add(new ItemPrevisao(TipoItemPrevisao.Fatura, $"Fatura {f.Cartao}", StatusTexto(f.Status), cor, "mdi-credit-card-outline",
-                f.Vencimento, f.Total, f.Pago, pendente, pendente && pagavel < Hoje, null, null, f.CartaoId, f.Mes, null,
-                pagavel != f.Vencimento ? pagavel : null));
+                f.Vencimento, f.Total, f.Pago, pendente, pendente && prazo < Hoje, null, null, f.CartaoId, f.Mes, null,
+                prazo != f.Vencimento ? prazo : null, null, movida ? pagavel : null,
+                movida && pagavel > prazo ? pagavel.DayNumber - prazo.DayNumber : null, movida));
         }
         itens = itens.OrderBy(i => i.PagarEm ?? i.PagavelAte ?? i.Data).ThenBy(i => i.Tipo).ToList();
 

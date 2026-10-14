@@ -210,6 +210,8 @@ export interface ItemPrevisao {
   pagarEm: string | null
   /** Pagando com esse dinheiro, fica X dias depois do prazo sem juros. */
   diasDepoisDoVencimento: number | null
+  /** Movida à mão no quadro (só esta ocorrência). */
+  movido: boolean
 }
 
 export interface PeriodoPrevisao {

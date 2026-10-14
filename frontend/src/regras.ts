@@ -1,4 +1,4 @@
-import type { Alerta } from './tipos'
+import type { Alerta, ItemPrevisao, PeriodoPrevisao } from './tipos'
 
 /**
  * Lógica das telas, separada dos componentes para ter testes unitários (regras.test.ts).
@@ -60,4 +60,26 @@ export function separarVencimentos(alertas: Alerta[]) {
     depois: aPagar.filter((a) => a.tipo !== 'Vencido' && a.dias > 7),
     total: centavos(aPagar.reduce((s, a) => s + a.valor, 0)),
   }
+}
+
+/** Situação de um card do quadro da previsão: atrasada, paga depois do prazo (risco de multa) ou em dia. */
+export function situacaoCard(i: Pick<ItemPrevisao, 'atrasado' | 'diasDepoisDoVencimento'>) {
+  if (i.atrasado) return { cor: 'error', texto: 'atrasada' }
+  if (i.diasDepoisDoVencimento) return { cor: 'warning', texto: `+${i.diasDepoisDoVencimento} dia${i.diasDepoisDoVencimento > 1 ? 's' : ''} do vencimento` }
+  return { cor: 'success', texto: 'no prazo' }
+}
+
+/**
+ * Data para gravar ao soltar um card numa coluna (período). Se a coluna é o lugar natural da conta
+ * (o prazo dela cai ali), devolve null = volta ao automático. No período de hoje, planeja para hoje.
+ */
+export function dataAoMover(
+  i: Pick<ItemPrevisao, 'data' | 'pagavelAte' | 'pagoCom'>,
+  coluna: Pick<PeriodoPrevisao, 'inicio' | 'fim' | 'atual'>,
+  hoje: string,
+): string | null {
+  const prazo = i.pagavelAte ?? i.data
+  const natural = (prazo >= coluna.inicio && prazo <= coluna.fim) || (coluna.atual && prazo < coluna.inicio)
+  if (natural && !i.pagoCom) return null
+  return coluna.atual && coluna.inicio < hoje ? hoje : coluna.inicio
 }

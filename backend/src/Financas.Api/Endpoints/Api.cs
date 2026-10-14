@@ -66,6 +66,7 @@ public static class Api
         api.MapGet("/previsao", (PrevisaoService s, DateOnly? data, DateOnly? de, DateOnly? ate) => s.Obter(data, de, ate));
         MapearPeriodosSalvos(api);
         api.MapGet("/previsao/config", (PrevisaoService s) => s.VerConfig());
+        api.MapPut("/previsao/mover", async (MoverDto dto, PrevisaoService s) => { await s.Mover(dto); return Results.Ok(); });
         api.MapPut("/previsao/config", (ConfigPrevisaoDto dto, PrevisaoService s) => s.SalvarConfig(dto));
         api.MapGet("/relatorios/comparativo", (RelatorioService s, IRelogio relogio, string? mes, int? meses) =>
             s.Comparativo(string.IsNullOrEmpty(mes) ? relogio.Hoje : Calendario.ParseMes(mes), meses ?? 6));

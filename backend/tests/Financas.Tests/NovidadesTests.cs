@@ -293,6 +293,55 @@ public class NovidadesTests
     }
 
     [Fact]
+    public async Task Mover_no_quadro_vale_so_para_aquela_conta_ou_fatura()
+    {
+        using var a = new Ambiente(); // hoje 15/10/2026, banco 1000
+        await Salario(a, "Salário", 4000, D(2026, 11, 1), RegraVencimento.DiaUtil, 5); // 09/11
+        await Salario(a, "Adiantamento", 2000, D(2026, 10, 20));
+        var luz = await a.Recorrente(TipoLancamento.Despesa, a.Energia, 300, D(2026, 10, 23));
+        await a.Despesa(500, D(2026, 9, 20), conta: a.Cartao); // fatura de outubro, venceu 10/10
+        var outubro = await a.Db.Lancamentos.SingleAsync(l => l.RegraId == luz.Id && l.Sequencia == 1);
+        var novembro = await a.Db.Lancamentos.SingleAsync(l => l.RegraId == luz.Id && l.Sequencia == 2);
+
+        // Luz de outubro (23/10) vai para o salário de 09/11; a de novembro continua no lugar.
+        await a.Previsao.Mover(new MoverDto(outubro.Id, null, null, D(2026, 11, 9)));
+        // Fatura atrasada vai para o adiantamento.
+        await a.Previsao.Mover(new MoverDto(null, a.Cartao.Id, D(2026, 10, 1), D(2026, 10, 20)));
+
+        var p = await a.Previsao.Obter();
+        var adiant = p.Periodos.Single(x => x.Inicio == D(2026, 10, 20));
+        var salario = p.Periodos.Single(x => x.Inicio == D(2026, 11, 9));
+        Assert.DoesNotContain(p.Periodos[0].Itens, i => i.Tipo == TipoItemPrevisao.Fatura);
+        var fatura = Assert.Single(adiant.Itens, i => i.Tipo == TipoItemPrevisao.Fatura);
+        Assert.True(fatura.Movido);
+        Assert.Equal(7, fatura.DiasDepoisDoVencimento); // vencia sáb 10/10; 12/10 feriado: prazo sem juros 13/10
+        Assert.True(fatura.Atrasado);
+        Assert.DoesNotContain(adiant.Itens, i => i.LancamentoId == outubro.Id);
+        var movida = Assert.Single(salario.Itens, i => i.LancamentoId == outubro.Id);
+        Assert.True(movida.Movido);
+        Assert.Equal(17, movida.DiasDepoisDoVencimento); // vence sexta 23/10
+        Assert.Equal(D(2026, 11, 9), movida.PagarEm);
+        // Sem nada pendente até 19/10, o período de hoje fica quitado e a janela avança até o adiantamento de 20/11,
+        // onde a luz de novembro aparece no lugar de sempre (mover a de outubro não mexeu nela).
+        Assert.True(p.Periodos[0].Quitado);
+        Assert.Contains(p.Periodos.Single(x => x.Inicio == D(2026, 11, 20)).Itens, i => i.LancamentoId == novembro.Id && !i.Movido);
+        Assert.Equal(1000 - 0, p.Periodos[0].SaldoFim); // nada mais sai até 19/10
+        Assert.Equal(1000 + 2000 - 500, adiant.SaldoFim);
+
+        // Nada no lançamento muda: é só planejamento.
+        var depois = await a.Db.Lancamentos.FindAsync(outubro.Id);
+        Assert.Equal((D(2026, 10, 23), 300m, StatusLancamento.Previsto), (depois!.Data, depois.Valor, depois.Status));
+
+        // Voltar ao automático.
+        await a.Previsao.Mover(new MoverDto(outubro.Id, null, null, null));
+        Assert.Contains((await a.Previsao.Obter()).Periodos.Single(x => x.Inicio == D(2026, 10, 20)).Itens, i => i.LancamentoId == outubro.Id);
+
+        // O que já foi pago não se move.
+        await a.Lancamentos.Confirmar(novembro.Id, new ConfirmarDto(D(2026, 10, 15), 300, null, null));
+        await Assert.ThrowsAsync<RegraNegocioException>(() => a.Previsao.Mover(new MoverDto(novembro.Id, null, null, D(2026, 10, 20))));
+    }
+
+    [Fact]
     public async Task Sem_salario_cadastrado_a_previsao_e_o_mes()
     {
         using var a = new Ambiente();

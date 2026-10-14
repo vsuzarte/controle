@@ -4,6 +4,7 @@ import { api, qs } from '../api'
 import { avisar, confirmarLancamento, erro, estado, pagarFatura } from '../estado'
 import { brl, dataBr, hojeIso, somarDias } from '../formato'
 import type { ConfigPrevisao, ItemPrevisao, Lancamento, PeriodoPrevisao, PeriodoSalvo, Previsao } from '../tipos'
+import QuadroPrevisao from '../components/QuadroPrevisao.vue'
 
 /**
  * Previsão por períodos de pagamento. "Automático": o período de hoje e a janela configurada (padrão: um mês de
@@ -15,6 +16,9 @@ const periodosSalvos = ref<PeriodoSalvo[]>([])
 const lembrada = () => { try { return localStorage.getItem('fin.previsao.selecao') ?? 'auto' } catch { return 'auto' } }
 const selecao = ref<string>(lembrada())
 const salvo = computed(() => periodosSalvos.value.find((x) => x.id === selecao.value))
+/** Quadro (arrastar contas entre pagamentos) ou lista. Lembrado neste aparelho. */
+const modo = ref<'quadro' | 'lista'>((() => { try { return localStorage.getItem('fin.previsao.modo') === 'lista' ? 'lista' : 'quadro' } catch { return 'quadro' } })())
+watch(modo, (v) => { try { localStorage.setItem('fin.previsao.modo', v) } catch { /* sem storage */ } })
 
 async function carregar() {
   try {
@@ -179,6 +183,10 @@ async function agir(i: ItemPrevisao) {
       </v-chip-group>
       <v-btn variant="text" size="small" prepend-icon="mdi-plus" @click="novoPeriodo">Período</v-btn>
       <v-spacer />
+      <v-btn-toggle v-model="modo" mandatory density="compact" variant="outlined" divided rounded="lg" aria-label="Ver como">
+        <v-btn value="quadro" size="small" prepend-icon="mdi-view-column-outline">Quadro</v-btn>
+        <v-btn value="lista" size="small" prepend-icon="mdi-format-list-bulleted">Lista</v-btn>
+      </v-btn-toggle>
       <v-btn variant="tonal" size="small" prepend-icon="mdi-tune-variant" @click="abrirConfig">Configurar</v-btn>
     </div>
 
@@ -213,8 +221,17 @@ async function agir(i: ItemPrevisao) {
         <b>{{ q.titulo }}</b> ({{ dataBr(q.inicio) }} a {{ dataBr(q.fim) }}): tudo pago e recebido. A previsão já mostra os próximos pagamentos.
       </v-alert>
 
-      <!-- ===== Períodos ===== -->
-      <v-row>
+      <!-- ===== Quadro ===== -->
+      <template v-if="modo === 'quadro'">
+        <div class="text-caption text-medium-emphasis mb-2">
+          Arraste uma conta ou fatura para pagar com o dinheiro de outro pagamento (vale só para ela; a conta do mês não muda).
+          No celular, segure o card antes de arrastar, ou use o menu "…".
+        </div>
+        <QuadroPrevisao :periodos="abertos" @agir="agir" />
+      </template>
+
+      <!-- ===== Lista ===== -->
+      <v-row v-else>
         <v-col v-for="per in abertos" :key="per.inicio" cols="12" :lg="abertos.length > 1 ? 6 : 12" :xl="abertos.length > 2 ? 4 : undefined">
           <v-card class="h-100" :class="{ 'opacity-70': per.encerrado }" data-testid="periodo" :aria-label="per.titulo">
             <v-card-item>

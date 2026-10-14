@@ -274,6 +274,38 @@ namespace Financas.Api.Dados.Migrations
                     b.ToTable("OrcamentoItens");
                 });
 
+            modelBuilder.Entity("Financas.Api.Dominio.PagamentoPlanejado", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("AtualizadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("CartaoId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("FaturaMes")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("LancamentoId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("PagarEm")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LancamentoId")
+                        .IsUnique();
+
+                    b.HasIndex("CartaoId", "FaturaMes")
+                        .IsUnique();
+
+                    b.ToTable("PagamentosPlanejados");
+                });
+
             modelBuilder.Entity("Financas.Api.Dominio.PeriodoSalvo", b =>
                 {
                     b.Property<Guid>("Id")

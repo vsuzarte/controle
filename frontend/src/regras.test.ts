@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { faltaNoVale, jurosPorPadrao, pagoAMais, passaDoLimite, separarVencimentos } from './regras'
+import { dataAoMover, faltaNoVale, jurosPorPadrao, pagoAMais, passaDoLimite, separarVencimentos, situacaoCard } from './regras'
 import { dataBr, nomeMes, parseValor, somarDias, somarMeses } from './formato'
 import type { Alerta } from './tipos'
 
@@ -75,5 +75,33 @@ describe('formato', () => {
     expect(nomeMes('2026-10')).toBe('Outubro de 2026')
     expect(nomeMes('2026-10', true)).toBe('out/26')
     expect(dataBr('2026-10-07')).toBe('07/10/2026')
+  })
+})
+
+describe('quadro da previsão', () => {
+  const adiantamento = { inicio: '2026-10-20', fim: '2026-11-08', atual: false }
+  const salario = { inicio: '2026-11-09', fim: '2026-11-19', atual: false }
+  const agora = { inicio: '2026-10-07', fim: '2026-10-19', atual: true }
+
+  it('cor do card: atrasada, depois do prazo ou no prazo', () => {
+    expect(situacaoCard({ atrasado: true, diasDepoisDoVencimento: 7 }).cor).toBe('error')
+    expect(situacaoCard({ atrasado: false, diasDepoisDoVencimento: 1 })).toEqual({ cor: 'warning', texto: '+1 dia do vencimento' })
+    expect(situacaoCard({ atrasado: false, diasDepoisDoVencimento: null }).cor).toBe('success')
+  })
+
+  it('soltar no período de outro pagamento grava a data desse pagamento', () => {
+    const escola = { data: '2026-11-05', pagavelAte: null, pagoCom: null }
+    expect(dataAoMover(escola, salario, '2026-10-15')).toBe('2026-11-09')
+  })
+
+  it('voltar para o lugar natural (inclusive fim de semana) volta ao automático', () => {
+    expect(dataAoMover({ data: '2026-11-05', pagavelAte: null, pagoCom: null }, adiantamento, '2026-10-15')).toBeNull()
+    expect(dataAoMover({ data: '2026-11-07', pagavelAte: '2026-11-09', pagoCom: null }, salario, '2026-10-15')).toBeNull()
+    // atrasada pertence ao período de hoje
+    expect(dataAoMover({ data: '2026-09-28', pagavelAte: null, pagoCom: null }, agora, '2026-10-15')).toBeNull()
+  })
+
+  it('adiantar para o período de hoje planeja para hoje', () => {
+    expect(dataAoMover({ data: '2026-10-28', pagavelAte: null, pagoCom: null }, agora, '2026-10-15')).toBe('2026-10-15')
   })
 })

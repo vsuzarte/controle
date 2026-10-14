@@ -16,6 +16,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<PeriodoSalvo> PeriodosSalvos => Set<PeriodoSalvo>();
     public DbSet<Configuracao> Configuracoes => Set<Configuracao>();
+    public DbSet<PagamentoPlanejado> PagamentosPlanejados => Set<PagamentoPlanejado>();
 
     /// <summary>Operação e motivo da próxima gravação, registrados na auditoria.</summary>
     private string? _operacao;
@@ -79,6 +80,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         });
 
         b.Entity<PeriodoSalvo>(e => e.Property(x => x.Nome).HasMaxLength(80));
+        b.Entity<PagamentoPlanejado>(e =>
+        {
+            e.HasIndex(x => x.LancamentoId).IsUnique();
+            e.HasIndex(x => new { x.CartaoId, x.FaturaMes }).IsUnique();
+        });
         b.Entity<Configuracao>(e =>
         {
             e.HasKey(x => x.Chave);

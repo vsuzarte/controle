@@ -93,6 +93,9 @@ public record ConfigPrevisaoDto(int? AteAntesDoPagamento, bool PularQuitado);
 /// <summary>Configuração atual mais o que ajuda a entender o efeito: o padrão e até que data a janela vai hoje.</summary>
 public record ConfigPrevisaoView(int? AteAntesDoPagamento, bool PularQuitado, int Padrao, int PagamentosPorMes, DateOnly? AteHoje);
 
+/// <summary>Mover no quadro: uma conta (LancamentoId) ou fatura (CartaoId + FaturaMes) para PagarEm; nulo = voltar ao automático.</summary>
+public record MoverDto(Guid? LancamentoId, Guid? CartaoId, DateOnly? FaturaMes, DateOnly? PagarEm);
+
 public record PeriodoSalvoDto(string Nome, DateOnly De, DateOnly Ate);
 
 public record PagarFaturaDto(Guid ContaOrigemId, decimal Valor, DateOnly Data, decimal? Juros = null);
