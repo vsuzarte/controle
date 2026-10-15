@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api'
 import { contasAtivas, erro, estado } from '../estado'
-import { brl, dataBr, hojeIso } from '../formato'
+import { brl, dataBr, hojeIso, nomeMes } from '../formato'
 import { ordenarLancamentos } from '../regras'
 import { TIPOS_CONTA, type Extrato, type ExtratoLinha } from '../tipos'
 import LancamentoLinha from '../components/LancamentoLinha.vue'
@@ -38,6 +38,8 @@ watch(() => [contaId.value, estado.mes, estado.versao], carregar, { immediate: t
 const grupos = computed(() => ordenarLancamentos(
   (extrato.value?.linhas ?? []).map((x) => ({ data: x.lancamento.data, valor: x.efeito, linha: x as ExtratoLinha })),
   'recentes', hojeIso()))
+const vale = computed(() => extrato.value?.tipo === 'Beneficio')
+const irParaFatura = (mes: string) => router.push({ path: '/cartoes', query: { cartao: contaId.value!, mes: mes.slice(0, 7) } })
 const icone = (tipo: string) => TIPOS_CONTA.find((t) => t.value === tipo)?.icone ?? 'mdi-bank'
 </script>
 
@@ -54,14 +56,51 @@ const icone = (tipo: string) => TIPOS_CONTA.find((t) => t.value === tipo)?.icone
 
     <v-progress-linear v-if="carregando" indeterminate color="primary" class="mb-2" />
     <template v-if="extrato">
-      <!-- Resumo do mês da conta -->
-      <v-card class="pa-4 mb-3" data-testid="resumo-extrato">
+      <!-- Cartão: o que importa é o limite e a fatura (não "saldo" nem "entrou") -->
+      <v-card v-if="extrato.cartao" class="pa-4 mb-3" data-testid="resumo-cartao">
+        <v-row dense align="center">
+          <v-col cols="6" sm="3">
+            <div class="rotulo">Disponível</div>
+            <div class="medio" :class="(extrato.cartao.disponivel ?? 0) < 0 ? 'text-error' : 'text-success'">
+              {{ extrato.cartao.disponivel !== null ? brl(extrato.cartao.disponivel) : '—' }}
+            </div>
+            <div class="text-caption text-medium-emphasis">
+              <template v-if="extrato.cartao.limite">usado {{ brl(extrato.cartao.limiteUsado) }} de {{ brl(extrato.cartao.limite) }}</template>
+              <template v-else>sem limite cadastrado</template>
+            </div>
+            <v-progress-linear v-if="extrato.cartao.limite" :model-value="Math.min(100, extrato.cartao.limiteUsado / extrato.cartao.limite * 100)"
+              :color="extrato.cartao.limiteUsado / extrato.cartao.limite > 0.85 ? 'error' : 'primary'" rounded height="6" class="mt-1" />
+          </v-col>
+          <v-col cols="6" sm="3">
+            <div class="rotulo">Compras no mês</div>
+            <div class="medio">{{ brl(extrato.saiu) }}</div>
+            <div class="text-caption text-medium-emphasis">pagamentos de fatura: {{ brl(extrato.entrou) }}</div>
+          </v-col>
+          <v-col v-if="extrato.cartao.faturaAPagar" cols="6" sm="3">
+            <div class="rotulo">Fatura a pagar · {{ nomeMes(extrato.cartao.faturaAPagar.mes, true) }}</div>
+            <div class="medio text-error">{{ brl(extrato.cartao.faturaAPagar.restante) }}</div>
+            <div class="text-caption text-medium-emphasis">vence {{ dataBr(extrato.cartao.faturaAPagar.vencimento).slice(0, 5) }}</div>
+          </v-col>
+          <v-col v-if="extrato.cartao.faturaAberta" cols="6" sm="3">
+            <div class="rotulo">Fatura aberta · {{ nomeMes(extrato.cartao.faturaAberta.mes, true) }}</div>
+            <div class="medio">{{ brl(extrato.cartao.faturaAberta.total) }}</div>
+            <div class="text-caption text-medium-emphasis">fecha {{ dataBr(extrato.cartao.faturaAberta.fechamento).slice(0, 5) }} · vence {{ dataBr(extrato.cartao.faturaAberta.vencimento).slice(0, 5) }}</div>
+          </v-col>
+          <v-col cols="12" class="d-flex justify-end pt-2">
+            <v-btn color="primary" variant="tonal" prepend-icon="mdi-receipt-text-outline" data-testid="ver-fatura"
+              @click="irParaFatura((extrato.cartao.faturaAPagar ?? extrato.cartao.faturaAberta)?.mes ?? extrato.mes)">Ver fatura</v-btn>
+          </v-col>
+        </v-row>
+      </v-card>
+
+      <!-- Banco, carteira e vale: saldo -->
+      <v-card v-else class="pa-4 mb-3" data-testid="resumo-extrato">
         <v-row dense>
           <v-col cols="6" sm="3"><div class="rotulo">Saldo no início</div><div class="medio">{{ brl(extrato.saldoInicio) }}</div></v-col>
-          <v-col cols="6" sm="3"><div class="rotulo">Entrou</div><div class="medio text-success">+ {{ brl(extrato.entrou) }}</div></v-col>
-          <v-col cols="6" sm="3"><div class="rotulo">Saiu</div><div class="medio text-error">− {{ brl(extrato.saiu) }}</div></v-col>
+          <v-col cols="6" sm="3"><div class="rotulo">{{ vale ? 'Recargas' : 'Entrou' }}</div><div class="medio text-success">+ {{ brl(extrato.entrou) }}</div></v-col>
+          <v-col cols="6" sm="3"><div class="rotulo">{{ vale ? 'Gastos' : 'Saiu' }}</div><div class="medio text-error">− {{ brl(extrato.saiu) }}</div></v-col>
           <v-col cols="6" sm="3">
-            <div class="rotulo">Saldo agora</div>
+            <div class="rotulo">{{ vale ? 'Saldo do vale' : 'Saldo agora' }}</div>
             <div class="medio" :class="extrato.saldoFim < 0 ? 'text-error' : ''" data-testid="saldo-fim">{{ brl(extrato.saldoFim) }}</div>
             <div v-if="extrato.saldoPrevisto !== extrato.saldoFim" class="text-caption text-medium-emphasis">
               com os previstos: {{ brl(extrato.saldoPrevisto) }}

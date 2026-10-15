@@ -1,4 +1,5 @@
 // Extrato de uma conta no mês.
+import type { Fatura } from './cartoes'
 import type { TipoConta } from './enums'
 import type { Lancamento } from './lancamentos'
 
@@ -21,4 +22,6 @@ export interface Extrato {
   saldoFim: number
   saldoPrevisto: number
   linhas: ExtratoLinha[]
+  /** Só cartão: limite e faturas (no cartão o "saldo" é dívida). */
+  cartao: { limite: number | null; limiteUsado: number; disponivel: number | null; faturaAberta: Fatura | null; faturaAPagar: Fatura | null } | null
 }

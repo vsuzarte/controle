@@ -67,7 +67,7 @@ public class ContaTests
     public async Task Extrato_mostra_cada_movimento_com_o_saldo_depois_dele()
     {
         using var a = new Ambiente();
-        var extratos = new ExtratoService(a.Db, new SaldoService(a.Db), a.Regras);
+        var extratos = new ExtratoService(a.Db, new SaldoService(a.Db), a.Regras, a.Cartoes);
         await a.Despesa(100, D(2026, 9, 20));                                   // mês anterior: entra no saldo inicial
         var mercado = await a.Despesa(50, D(2026, 10, 2));
         await a.Lancamentos.Criar(new NovoLancamentoDto(TipoLancamento.Receita, "Freela", 300, D(2026, 10, 5),
@@ -87,5 +87,15 @@ public class ContaTests
 
         var poupanca = await extratos.Obter(a.Poupanca.Id, D(2026, 10, 1));
         Assert.Equal([-60m, 200m], poupanca.Linhas.Select(l => l.Efeito)); // a transferência entra na poupança
+        Assert.Null(e.Cartao);
+
+        // Cartão: o resumo é o limite e a fatura; as linhas não têm "saldo".
+        a.Cartao.Limite = 1000m;
+        await a.Db.SaveChangesAsync();
+        await a.Despesa(300, D(2026, 10, 14), conta: a.Cartao, parcelas: 3);
+        var cartao = await extratos.Obter(a.Cartao.Id, D(2026, 10, 1));
+        Assert.Equal((1000m, 300m, 700m), (cartao.Cartao!.Limite, cartao.Cartao.LimiteUsado, cartao.Cartao.Disponivel));
+        Assert.All(cartao.Linhas, l => Assert.Null(l.Saldo));
+        Assert.Equal(100m, cartao.Cartao.FaturaAberta!.Total);
     }
 }
