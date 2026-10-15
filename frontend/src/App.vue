@@ -128,7 +128,7 @@ onMounted(() => {
                 :title="m.titulo"
                 :aria-label="m.titulo"
                 rounded="lg"
-                exact
+                :active="ativo(m.to)"
                 :class="menuCompacto ? 'mb-0' : 'mb-1'"
               />
             </template>
@@ -174,11 +174,11 @@ onMounted(() => {
 
       <!-- ===== Celular: barra inferior ===== -->
       <v-bottom-navigation v-if="!mdAndUp" grow color="primary" height="68" elevation="8" aria-label="Navegação">
-        <v-btn v-for="m in barraEsquerda" :key="m.to" :to="m.to" exact>
+        <v-btn v-for="m in barraEsquerda" :key="m.to" :to="m.to" :active="ativo(m.to)">
           <v-icon>{{ ativo(m.to) ? m.iconeAtivo : m.icone }}</v-icon><span>{{ m.titulo }}</span>
         </v-btn>
         <v-btn class="botao-mais" aria-label="Novo lançamento" @click="novoLancamento()"><v-icon>mdi-plus</v-icon></v-btn>
-        <v-btn v-for="m in barraDireita" :key="m.to" :to="m.to" exact>
+        <v-btn v-for="m in barraDireita" :key="m.to" :to="m.to" :active="ativo(m.to)">
           <v-icon>{{ ativo(m.to) ? m.iconeAtivo : m.icone }}</v-icon><span>Contas</span>
         </v-btn>
         <v-btn :active="maisAtivo" @click="mais = true">
