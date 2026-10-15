@@ -4,7 +4,7 @@ import { useDisplay } from 'vuetify'
 import { api, qs } from '../api'
 import { erro, estado, lerNotaFiscal } from '../estado'
 import { brl, dataBr, hojeIso, somarMeses } from '../formato'
-import { ordenarLancamentos, somarEntradas, type OrdemLancamentos } from '../regras'
+import { ehFixo, ordenarLancamentos, somarEntradas, type OrdemLancamentos } from '../regras'
 import type { Lancamento } from '../tipos'
 import LancamentoLinha from '../components/LancamentoLinha.vue'
 import SeletorMes from '../components/SeletorMes.vue'
@@ -27,7 +27,7 @@ const lembrar = <T extends string>(chave: string, padrao: T, validos: T[]) => {
 }
 const ordem = lembrar<OrdemLancamentos>('fin.lancamentos.ordem', 'recentes', ['recentes', 'antigos', 'valor'])
 /** Telas menores: uma seção por vez. */
-const secao = lembrar<'saidas' | 'entradas' | 'transferencias'>('fin.lancamentos.secao', 'saidas', ['saidas', 'entradas', 'transferencias'])
+const secao = lembrar<'ocasional' | 'fixo'>('fin.lancamentos.lado', 'ocasional', ['ocasional', 'fixo'])
 const ORDENS: { value: OrdemLancamentos; title: string; icone: string }[] = [
   { value: 'recentes', title: 'Mais recentes primeiro', icone: 'mdi-sort-calendar-descending' },
   { value: 'antigos', title: 'Mais antigos primeiro', icone: 'mdi-sort-calendar-ascending' },
@@ -52,28 +52,34 @@ watch(() => filtros.busca, () => { clearTimeout(espera); espera = setTimeout(car
 /** Vales (VR/VA): a recarga aparece nas entradas, mas somada à parte. */
 const vales = computed(() => new Set(estado.contas.filter((c) => c.tipo === 'Beneficio').map((c) => c.id)))
 const visiveis = computed(() => lista.value.filter((l) => verCancelados.value || l.status !== 'Cancelado'))
-const montar = (tipo: Lancamento['tipo']) => {
-  const itens = visiveis.value.filter((l) => l.tipo === tipo)
+/**
+ * Um bloco da tela. Ocasionais (comprei, ganhei) ficam por dia, na ordem escolhida.
+ * Fixos (contas do mês, parcelas, salário, recarga) ficam numa lista só, na ordem do vencimento.
+ */
+const montar = (tipo: Lancamento['tipo'], fixo: boolean | null) => {
+  const itens = visiveis.value.filter((l) => l.tipo === tipo && (fixo === null || ehFixo(l) === fixo))
+  const validos = itens.filter((l) => l.status !== 'Cancelado')
+  const entradas = tipo === 'Receita' ? somarEntradas(validos, vales.value) : null
   return {
-    grupos: ordenarLancamentos(itens, ordem.value, hojeIso()),
+    grupos: fixo === false
+      ? ordenarLancamentos(itens, ordem.value, hojeIso())
+      : itens.length ? [{ chave: 'todos', dia: null, inicioProximos: false, itens: [...itens].sort((a, b) => a.data.localeCompare(b.data)) }] : [],
     quantidade: itens.length,
-    ...(() => {
-      const validos = itens.filter((l) => l.status !== 'Cancelado')
-      if (tipo !== 'Receita') return { total: validos.reduce((s, l) => s + l.valor, 0), vale: 0 }
-      const e = somarEntradas(validos, vales.value)
-      return { total: e.dinheiro, vale: e.vale }
-    })(),
+    total: entradas ? entradas.dinheiro : validos.reduce((t, l) => t + l.valor, 0),
+    vale: entradas?.vale ?? 0,
   }
 }
 const secoes = computed(() => [
-  { chave: 'saidas' as const, titulo: 'Saídas', icone: 'mdi-arrow-down', cor: 'error', ...montar('Despesa') },
-  { chave: 'entradas' as const, titulo: 'Entradas', icone: 'mdi-arrow-up', cor: 'success', ...montar('Receita') },
-  { chave: 'transferencias' as const, titulo: 'Transferências', icone: 'mdi-swap-horizontal', cor: 'secondary', ...montar('Transferencia') },
-])
-/** Computador: saídas à esquerda, entradas (e transferências) à direita. Celular: uma por vez. */
-const colunas = computed(() => lgAndUp.value
-  ? [secoes.value.filter((s) => s.chave === 'saidas'), secoes.value.filter((s) => s.chave !== 'saidas' && (s.quantidade || s.chave === 'entradas'))]
-  : [secoes.value.filter((s) => s.chave === secao.value)])
+  { chave: 'gastos', lado: 'ocasional', titulo: 'Gastos ocasionais', icone: 'mdi-cart-outline', cor: 'error', sempre: true, ...montar('Despesa', false) },
+  { chave: 'ganhos', lado: 'ocasional', titulo: 'Entradas ocasionais', icone: 'mdi-cash-plus', cor: 'success', sempre: true, ...montar('Receita', false) },
+  { chave: 'contas', lado: 'fixo', titulo: 'Contas fixas e parcelas', icone: 'mdi-calendar-sync', cor: 'error', sempre: true, ...montar('Despesa', true) },
+  { chave: 'fixas', lado: 'fixo', titulo: 'Entradas fixas', icone: 'mdi-briefcase-outline', cor: 'success', sempre: true, ...montar('Receita', true) },
+  { chave: 'transferencias', lado: 'fixo', titulo: 'Transferências', icone: 'mdi-swap-horizontal', cor: 'secondary', sempre: false, ...montar('Transferencia', null) },
+].filter((x) => x.sempre || x.quantidade))
+/** Computador: ocasionais à esquerda, fixos à direita. Celular: um lado por vez. */
+const colunas = computed(() => (lgAndUp.value ? ['ocasional', 'fixo'] : [secao.value])
+  .map((lado) => ({ lado, secoes: secoes.value.filter((x) => x.lado === lado) })))
+const LADOS = { ocasional: { titulo: 'Ocasionais', dica: 'o que você comprou ou ganhou no mês' }, fixo: { titulo: 'Fixos do mês', dica: 'contas do mês, parcelas, salário' } }
 
 const totais = computed(() => {
   const ok = lista.value.filter((l) => l.status === 'Realizado')
@@ -148,17 +154,17 @@ const opcoesCategorias = computed(() => estado.categorias.map((c) => ({ title: `
       </v-card>
     </v-expand-transition>
 
-    <!-- Celular/tablet: escolhe a seção -->
+    <!-- Celular/tablet: um lado por vez -->
     <v-btn-toggle v-if="!lgAndUp" v-model="secao" mandatory divided variant="outlined" color="primary" density="comfortable" class="mb-3 w-100">
-      <v-btn v-for="s in secoes" :key="s.chave" :value="s.chave" class="flex-grow-1" :prepend-icon="s.icone">
-        {{ s.titulo }} ({{ s.quantidade }})
-      </v-btn>
+      <v-btn value="ocasional" class="flex-grow-1" prepend-icon="mdi-cart-outline">Ocasionais</v-btn>
+      <v-btn value="fixo" class="flex-grow-1" prepend-icon="mdi-calendar-sync">Fixos do mês</v-btn>
     </v-btn-toggle>
 
     <v-progress-linear v-if="carregando" indeterminate color="primary" class="mb-2" />
     <v-row>
-      <v-col v-for="(col, i) in colunas" :key="i" cols="12" :lg="i === 0 ? 7 : 5">
-        <v-card v-for="s in col" :key="s.chave" class="mb-4" :data-testid="'secao-' + s.chave">
+      <v-col v-for="col in colunas" :key="col.lado" cols="12" :lg="col.lado === 'ocasional' ? 7 : 5" :data-testid="'lado-' + col.lado">
+        <div v-if="lgAndUp" class="rotulo mb-2">{{ LADOS[col.lado as 'ocasional' | 'fixo'].titulo }} <span class="text-lowercase" style="letter-spacing: 0">· {{ LADOS[col.lado as 'ocasional' | 'fixo'].dica }}</span></div>
+        <v-card v-for="s in col.secoes" :key="s.chave" class="mb-4" :data-testid="'secao-' + s.chave">
           <div class="d-flex align-center ga-3 px-4 py-3 cabeca-secao">
             <v-avatar :color="s.cor" variant="tonal" rounded="lg" size="34"><v-icon size="18">{{ s.icone }}</v-icon></v-avatar>
             <div class="font-weight-bold">{{ s.titulo }}</div>

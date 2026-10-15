@@ -158,3 +158,11 @@ export function ordenarLancamentos<T extends { data: string; valor: number }>(li
   const primeiroFuturo = ordem === 'recentes' ? dias.find((d) => d > hoje) : undefined
   return ordenados.map((d) => ({ chave: d, dia: d, itens: porDia.get(d)!, inicioProximos: d === primeiroFuturo }))
 }
+
+/**
+ * Fixo = veio de uma conta do mês, parcelamento, salário ou recarga (tem regra). O resto é ocasional:
+ * o que foi lançado na hora (à mão ou pela nota fiscal), mesmo que agendado para depois.
+ */
+export function ehFixo(l: { regraId: string | null }) {
+  return !!l.regraId
+}

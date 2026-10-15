@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calcularParcelas, dataAoMover, dividirParcelas, faltaNoVale, faturaDaCompra, jurosPorPadrao, ordenarLancamentos, pagoAMais, passaDoLimite, quandoCai, separarVencimentos, situacaoCard, somarEntradas } from './regras'
+import { calcularParcelas, dataAoMover, ehFixo, dividirParcelas, faltaNoVale, faturaDaCompra, jurosPorPadrao, ordenarLancamentos, pagoAMais, passaDoLimite, quandoCai, separarVencimentos, situacaoCard, somarEntradas } from './regras'
 import { dataBr, nomeMes, parseValor, somarDias, somarMeses } from './formato'
 import type { Alerta } from './tipos'
 
@@ -163,5 +163,12 @@ describe('somarEntradas', () => {
     const vales = new Set(['vr'])
     expect(somarEntradas([{ valor: 5200, contaId: 'banco' }, { valor: 520, contaId: 'vr' }, { valor: 0.1, contaId: 'banco' }], vales))
       .toEqual({ dinheiro: 5200.1, vale: 520 })
+  })
+})
+
+describe('ehFixo', () => {
+  it('conta do mês, parcela e salário são fixos; o resto é ocasional', () => {
+    expect(ehFixo({ regraId: 'r1' })).toBe(true)
+    expect(ehFixo({ regraId: null })).toBe(false)
   })
 })
