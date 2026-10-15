@@ -1,3 +1,4 @@
+using Financas.Api.Dominio;
 using Financas.Api.Funcionalidades.Comum;
 
 namespace Financas.Api.Funcionalidades.Contas;
@@ -17,6 +18,8 @@ public static class ContasEndpoints
             var c = await s.AjustarLimite(id, dto);
             return new { c.Id, c.Limite };
         });
+        g.MapGet("/{id:guid}/extrato", (Guid id, string? mes, ExtratoService s, IRelogio relogio) =>
+            s.Obter(id, string.IsNullOrEmpty(mes) ? relogio.Hoje : Calendario.ParseMes(mes)));
         g.MapPut("/{id:guid}/recarga", (Guid id, RecargaDto dto, RecargaDoVale s) => s.Definir(id, dto));
     }
 }

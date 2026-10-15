@@ -7,7 +7,8 @@ import { brl, dataBr, hojeIso, nomeMes } from '../formato'
 import type { Compra, ItemCompra, Lancamento } from '../tipos'
 import CampoValor from './CampoValor.vue'
 
-const props = defineProps<{ l: Lancamento; mostrarData?: boolean }>()
+/** No extrato: efeito na conta (+/−, vale também para transferência) e o saldo depois do movimento. */
+const props = defineProps<{ l: Lancamento; mostrarData?: boolean; efeito?: number; saldo?: number | null }>()
 const { xs } = useDisplay()
 
 const dialogo = ref<'cancelar' | 'estornar' | 'reabrir' | null>(null)
@@ -40,7 +41,8 @@ const podeConfirmar = computed(() => previsto.value && props.l.tipo !== 'Transfe
 const icone = computed(() =>
   props.l.tipo === 'Transferencia' ? 'mdi-swap-horizontal' : props.l.categoriaIcone ?? (props.l.tipo === 'Receita' ? 'mdi-arrow-up' : 'mdi-arrow-down'),
 )
-const sinal = computed(() => (props.l.tipo === 'Receita' ? 1 : props.l.tipo === 'Despesa' ? -1 : 0))
+const sinal = computed(() => props.efeito !== undefined ? Math.sign(props.efeito)
+  : props.l.tipo === 'Receita' ? 1 : props.l.tipo === 'Despesa' ? -1 : 0)
 const corValor = computed(() => (sinal.value === 0 ? 'text-secondary' : sinal.value * props.l.valor > 0 ? 'text-success' : ''))
 
 const subtitulo = computed(() => {
@@ -123,6 +125,7 @@ async function executar() {
           data-testid="abrir-itens" @click.stop="alternarItens" />
         <div class="d-flex flex-column align-end">
           <span class="valor" :class="corValor">{{ sinal < 0 ? '−' : sinal > 0 ? '+' : '' }}{{ brl(Math.abs(l.valor)) }}</span>
+          <span v-if="saldo !== undefined && saldo !== null" class="text-caption text-medium-emphasis text-no-wrap" data-testid="saldo-linha">saldo {{ brl(saldo) }}</span>
           <v-chip v-if="atrasado" size="x-small" color="error" variant="tonal" label>atrasado</v-chip>
           <v-chip v-else-if="previsto" size="x-small" color="warning" variant="tonal" label>{{ noCartao ? 'a cobrar' : 'previsto' }}</v-chip>
           <v-chip v-else-if="cancelado" size="x-small" variant="tonal" label>cancelado</v-chip>

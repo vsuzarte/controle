@@ -63,6 +63,7 @@ public static class Servicos
         s.AddScoped<SaldoService>();
         s.AddScoped<RecargaDoVale>();
         s.AddScoped<ContaService>();
+        s.AddScoped<ExtratoService>();
         s.AddScoped<CategoriaService>();
         s.AddScoped<GeradorDeOcorrencias>();
         s.AddScoped<RegraService>();

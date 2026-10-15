@@ -101,6 +101,7 @@ async function sair() {
                   <div class="text-caption text-medium-emphasis">{{ tipoConta(x.tipo)?.title }}</div>
                 </div>
                 <v-chip v-if="!x.ativa" size="x-small" label>excluída</v-chip>
+                <v-btn icon="mdi-text-box-outline" variant="text" size="small" title="Extrato" :aria-label="'Extrato de ' + x.nome" :to="{ path: '/extrato', query: { conta: x.id } }" @click.stop />
                 <v-btn icon="mdi-history" variant="text" size="small" :aria-label="'Histórico de ' + x.nome" @click.stop="verHistorico(x.id, x.nome)" />
               </div>
               <div class="px-4 pb-4 mt-auto">

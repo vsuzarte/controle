@@ -30,6 +30,7 @@ watch(recolhido, (v) => { try { localStorage.setItem('fin.menu.recolhido', v ? '
 const menu = [
   { to: '/', titulo: 'Início', icone: 'mdi-home-variant-outline', iconeAtivo: 'mdi-home-variant' },
   { to: '/lancamentos', titulo: 'Lançamentos', icone: 'mdi-swap-vertical', iconeAtivo: 'mdi-swap-vertical-bold' },
+  { to: '/extrato', titulo: 'Extrato', icone: 'mdi-text-box-outline', iconeAtivo: 'mdi-text-box' },
   { to: '/contas-do-mes', titulo: 'Contas do mês', icone: 'mdi-calendar-blank-outline', iconeAtivo: 'mdi-calendar-blank' },
   { to: '/previsao', titulo: 'Previsão', icone: 'mdi-calendar-clock-outline', iconeAtivo: 'mdi-calendar-clock' },
   { to: '/planejamento', titulo: 'Planejamento', icone: 'mdi-chart-donut', iconeAtivo: 'mdi-chart-donut' },
@@ -37,9 +38,11 @@ const menu = [
   { to: '/relatorios', titulo: 'Relatórios', icone: 'mdi-chart-line', iconeAtivo: 'mdi-chart-line' },
   { to: '/cadastros', titulo: 'Ajustes', icone: 'mdi-cog-outline', iconeAtivo: 'mdi-cog' },
 ]
-const barraEsquerda = menu.slice(0, 2)
-const barraDireita = [menu[2]]
-const menuMais = menu.slice(3)
+// Celular: Início e Lançamentos à esquerda do +, Contas do mês à direita; o resto em "Mais".
+const naBarra = ['/', '/lancamentos', '/contas-do-mes']
+const barraEsquerda = menu.filter((m) => naBarra.slice(0, 2).includes(m.to))
+const barraDireita = menu.filter((m) => m.to === naBarra[2])
+const menuMais = menu.filter((m) => !naBarra.includes(m.to))
 const maisAtivo = computed(() => menuMais.some((m) => m.to === route.path))
 const ativo = (to: string) => route.path === to
 

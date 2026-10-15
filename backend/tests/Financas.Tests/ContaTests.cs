@@ -62,4 +62,30 @@ public class ContaTests
         erro = await Assert.ThrowsAsync<RegraNegocioException>(() => a.Contas.Desativar(a.Cartao.Id, null));
         Assert.Contains("fatura sem pagar", erro.Message);
     }
+
+    [Fact]
+    public async Task Extrato_mostra_cada_movimento_com_o_saldo_depois_dele()
+    {
+        using var a = new Ambiente();
+        var extratos = new ExtratoService(a.Db, new SaldoService(a.Db), a.Regras);
+        await a.Despesa(100, D(2026, 9, 20));                                   // mês anterior: entra no saldo inicial
+        var mercado = await a.Despesa(50, D(2026, 10, 2));
+        await a.Lancamentos.Criar(new NovoLancamentoDto(TipoLancamento.Receita, "Freela", 300, D(2026, 10, 5),
+            a.Banco.Id, null, a.Salario.Id, FormaPagamento.Pix, null, null, null, null));
+        await a.Lancamentos.Criar(new NovoLancamentoDto(TipoLancamento.Transferencia, "Guardar", 200, D(2026, 10, 6),
+            a.Banco.Id, a.Poupanca.Id, null, FormaPagamento.Transferencia, null, null, null, null));
+        await a.Lancamentos.Estornar(mercado.Id, new EstornoDto(10, D(2026, 10, 7), "troca"));
+        await a.Despesa(80, D(2026, 10, 25), status: StatusLancamento.Previsto);  // previsto: não mexe no saldo
+        await a.Despesa(60, D(2026, 10, 3), conta: a.Poupanca);                  // outra conta: não aparece
+
+        var e = await extratos.Obter(a.Banco.Id, D(2026, 10, 1));
+        Assert.Equal(900m, e.SaldoInicio);
+        Assert.Equal([-50m, 300m, -200m, 10m, -80m], e.Linhas.Select(l => l.Efeito));
+        Assert.Equal([850m, 1150m, 950m, 960m, null], e.Linhas.Select(l => l.Saldo));
+        Assert.Equal((310m, 250m, 960m, 880m), (e.Entrou, e.Saiu, e.SaldoFim, e.SaldoPrevisto));
+        Assert.Equal(960m, (await a.Contas.Listar()).Single(c => c.Id == a.Banco.Id).Saldo); // bate com o saldo da conta
+
+        var poupanca = await extratos.Obter(a.Poupanca.Id, D(2026, 10, 1));
+        Assert.Equal([-60m, 200m], poupanca.Linhas.Select(l => l.Efeito)); // a transferência entra na poupança
+    }
 }

@@ -18,6 +18,7 @@ const router = createRouter({
     { path: '/cartoes', component: () => import('./views/Cartoes.vue') },
     { path: '/previsao', component: () => import('./views/Previsao.vue') },
     { path: '/relatorios', component: () => import('./views/Relatorios.vue') },
+    { path: '/extrato', component: () => import('./views/Extrato.vue') },
     { path: '/contas-do-mes', component: () => import('./views/ContasDoMes.vue') },
     { path: '/recorrencias', redirect: '/contas-do-mes' },
     { path: '/cadastros', component: () => import('./views/Cadastros.vue') },
